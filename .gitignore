@@ -1,0 +1,4 @@
+*.pyc
+*.sw[po]
+.python-version
+

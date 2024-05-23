@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "geoserver_rest"
+version = "1.0.0"
+description = "library to access geoserver rest api"
+authors = ["Rocky Chen <Rocky.Chen@dbca.wa.gov.au>"]
+license = "Apache-2.0"
+
+[tool.poetry.dependencies]
+python = "~3.12"
+requests = "~2.32.0"
+
+[tool.poetry.dev-dependencies]
+ipdb = "^0.13.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
