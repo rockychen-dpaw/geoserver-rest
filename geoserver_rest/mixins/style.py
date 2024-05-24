@@ -86,7 +86,7 @@ GENERIC_STYLE_TEMPLATE = """<?xml version="1.0" encoding="ISO-8859-1"?>
   </NamedLayer>
 </StyledLayerDescriptor>
 """
-class StylesMixin(object):
+class StyleMixin(object):
     def styles_url(self,workspace):
         return "{0}/rest/workspaces/{1}/styles".format(self.geoserver_url,workspace)
     
