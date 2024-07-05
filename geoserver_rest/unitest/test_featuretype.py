@@ -1,0 +1,142 @@
+import unittest
+import os
+
+from .basetest import BaseTest
+
+STYLE_TEMPLATE = """<?xml version="1.0" encoding="ISO-8859-1"?>
+<StyledLayerDescriptor version="1.0.0" 
+                       xsi:schemaLocation="http://www.opengis.net/sld StyledLayerDescriptor.xsd" 
+                       xmlns="http://www.opengis.net/sld" 
+                       xmlns:ogc="http://www.opengis.net/ogc" 
+                       xmlns:xlink="http://www.w3.org/1999/xlink" 
+                       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <NamedLayer>
+    <Name>{0}</Name>
+    <UserStyle>
+      <Name>{0}</Name>
+      <Title>A orange generic style</Title>
+      <FeatureTypeStyle>
+        <Rule>
+          <Name>raster</Name>
+          <Title>raster</Title>
+          <ogc:Filter>
+            <ogc:PropertyIsEqualTo>
+              <ogc:Function name="isCoverage"/>
+              <ogc:Literal>true</ogc:Literal>
+            </ogc:PropertyIsEqualTo>
+          </ogc:Filter>
+          <RasterSymbolizer>
+            <Opacity>1.0</Opacity>
+          </RasterSymbolizer>
+        </Rule>
+        <Rule>
+          <Title>orange polygon</Title>
+          <ogc:Filter>
+            <ogc:PropertyIsEqualTo>
+              <ogc:Function name="dimension">
+                <ogc:Function name="geometry"/>
+              </ogc:Function>
+              <ogc:Literal>2</ogc:Literal>
+            </ogc:PropertyIsEqualTo>
+          </ogc:Filter>
+          <PolygonSymbolizer>
+            <Fill>
+              <CssParameter name="fill">#ff6600</CssParameter>
+            </Fill>
+            <Stroke>
+              <CssParameter name="stroke">#000000</CssParameter>
+              <CssParameter name="stroke-width">0.5</CssParameter>
+            </Stroke>
+          </PolygonSymbolizer>
+        </Rule>
+        <Rule>
+          <Title>orange line</Title>
+          <ogc:Filter>
+            <ogc:PropertyIsEqualTo>
+              <ogc:Function name="dimension">
+                <ogc:Function name="geometry"/>
+              </ogc:Function>
+              <ogc:Literal>1</ogc:Literal>
+            </ogc:PropertyIsEqualTo>
+          </ogc:Filter>
+          <LineSymbolizer>
+            <Stroke>
+              <CssParameter name="stroke">#ff6600</CssParameter>
+              <CssParameter name="stroke-opacity">1</CssParameter>
+            </Stroke>
+          </LineSymbolizer>
+        </Rule>
+        <Rule>
+          <Title>orange point</Title>
+          <ElseFilter/>
+          <PointSymbolizer>
+            <Graphic>
+              <Mark>
+                <WellKnownName>square</WellKnownName>
+                <Fill>
+                  <CssParameter name="fill">#ff6600</CssParameter>
+                </Fill>
+              </Mark>
+              <Size>6</Size>
+            </Graphic>
+          </PointSymbolizer>
+        </Rule>
+        <VendorOption name="ruleEvaluation">first</VendorOption>
+      </FeatureTypeStyle>
+    </UserStyle>
+  </NamedLayer>
+</StyledLayerDescriptor>
+"""
+class FeturetypeTest(BaseTest):
+    def test_featuretype(self):
+        test_workspace = "testws4unitest"
+        #create the test workspace if doesn't have
+        if self.geoserver.has_workspace(test_workspace):
+            print("The testing workspace({}) already exist, delete it".format(test_workspace))
+            self.geoserver.delete_workspace(test_workspace,True)
+
+        print("Create the testing workspace({}) for testing".format(test_workspace))
+        self.geoserver.create_workspace(test_workspace)
+        recurse = True
+        try:
+            storename = "testds4unitest"
+            parameters = {
+                "host": os.environ.get("POSTGIS_HOST"),
+                "port": os.environ.get("POSTGIS_PORT"),
+                "database": os.environ.get("POSTGIS_DATABASE"),
+                "schema": os.environ.get("POSTGIS_SCHEMA"),
+                "user": os.environ.get("POSTGIS_USER"),
+                "passwd": os.environ.get("POSTGIS_PASSWORD"),
+                "Connection timeout": 5,
+                "Max connection idle time": 600,
+                "min connections": 5,
+                "max connections": 20,
+                "fetch size": 500
+            }
+            print("Try to create the datastore({}) for testing".format(storename))
+            self.geoserver.update_datastore(test_workspace,storename,parameters,create=True)
+            self.assertTrue(self.geoserver.has_datastore(test_workspace,storename),"The datastore({}) should be already created".format(storename))
+            print("Create the datastore({}) successfully".format(storename))
+
+            test_stylename = "teststyle4unitest"
+            test_styleversion = "1.0.0"
+
+            print("Try to create the sld style({0}) for testing".format(test_stylename,test_styleversion))
+            test_styledata = template.format(test_stylename)
+            self.geoserver.update_style(test_workspace,test_stylename,test_styleversion,test_styledata)
+            self.assertTrue(self.geoserver.has_style(test_workspace,test_stylename),"The style() should be created".format(test_stylename))
+            print("Create the style({}) successfully".format(test_stylename))
+
+
+            recurse = False
+        finally:
+            #delete the test workspace
+            print("Delete the testing workspace({})".format(test_workspace))
+            self.geoserver.delete_workspace(test_workspace,recurse=recurse)
+
+
+
+
+if __name__ == "__main__":
+    unittest.main()
+

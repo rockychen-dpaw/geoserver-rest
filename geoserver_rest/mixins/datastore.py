@@ -85,23 +85,10 @@ class DatastoreMixin(object):
     "cache and reuse memory maps": True,
     "namespace": "",
     "filetype": "shapefile",
-    "charset": "ISO-8859-1"
-    "create spatial index": True,
-    "fstype": "shape"
-    "url":"",
-    "enable spatial index": True,
-    "memory mapped buffer": False,
-    "timezone": "Australian Western Standard Time"
-}
-
-    SHAPEFILES_CONNECTIONS_PARAMETERS = {
-    "cache and reuse memory maps": True,
-    "namespace": "",
-    "filetype": "shapefile",
     "charset": "ISO-8859-1",
     "create spatial index": True,
-    "fstype": "shape"
-    "url": "",
+    "fstype": "shape",
+    "url":"",
     "enable spatial index": True,
     "memory mapped buffer": False,
     "timezone": "Australian Western Standard Time"
@@ -115,39 +102,35 @@ class DatastoreMixin(object):
         {}
     </connectionParameters>
 </dataStore>
-    """.format(storename,parameters.get("description",""),connection_parameters)
+    """
     def update_datastore(self,workspace,storename,parameters,create=None):
         """
         Return True if created; otherwise return False if update
         """
         ds_connection_parameters = None
         if any(k for k in ["host","port","schema"] if k in parameters):
-            ds_connection_parameters = POSTGIS_CONNECTION_PARAMETERS
+            ds_connection_parameters = self.POSTGIS_CONNECTION_PARAMETERS
         elif parameters.get("database","").endswith(".gpkg"):
-            ds_connection_parameters = POSTGIS_CONNECTION_PARAMETERS
+            ds_connection_parameters = self.GEOPACKAGE_CONNECTION_PARAMETERS
         else:
             url = parameters.get("url")
             if not url:
                 raise Exception("Can't recognize the datastore type")
             if url.endswith(".shp"):
-                ds_connection_parameters = SHAPEFILE_CONNECTION_PARAMETERS
+                ds_connection_parameters = self.SHAPEFILE_CONNECTION_PARAMETERS
             else:
-                ds_connection_parameters = SHAPEFILE_CONNECTION_PARAMETERS
-
+                raise Exception("The datastore({}) Not Support".format(url))
     
         connection_parameters = None
         for k,v in ds_connection_parameters.items():
             if k in parameters:
-                if parameters[k] is None:
-                    continue
-                else:
-                    value = parameters[k]
+                value = parameters[k]
             else:
                 value = v
 
             if value is None:
                 continue
-            elif isinstance(value,bool)
+            elif isinstance(value,bool):
                 value = "true" if value else "false"
             else:
                 value = str(value)
@@ -157,7 +140,7 @@ class DatastoreMixin(object):
             else:
                 connection_parameters = """<entry key="{}">{}</entry>""".format(k,value)
     
-        store_data = STORE_TEMPLATE.format(storename,parameters.get("description",""),connection_parameters)
+        store_data = self.STORE_TEMPLATE.format(storename,parameters.get("description",""),connection_parameters)
         if create is None:
             #check whether datastore exists or not.
             create = False if self.has_datastore(workspace,storename) else True
@@ -177,7 +160,7 @@ class DatastoreMixin(object):
             logger.debug("Succeed to update the datastore({}:{})".format(workspace,storename))
             return False
     
-    def delete_datastore(workspace,storename,recurse=False):
+    def delete_datastore(self,workspace,storename,recurse=False):
         """
         Return true if deleted the datastore; otherwise return False if datastore doesn't exist
         """

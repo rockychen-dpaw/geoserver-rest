@@ -92,9 +92,13 @@ class StyleMixin(object):
     
     def style_url(self,workspace,stylename):
         return "{0}/rest/workspaces/{1}/styles/{2}".format(self.geoserver_url,workspace,stylename)
+
+    def list_styles(self,workspace):
+        r = self.get(self.styles_url(workspace),headers=self.accept_header("json"))
+        if r.status_code >= 300:
+            raise Exception("Failed to list the workspaces. code = {},message = {}".format(r.status_code, r.content))
     
-    def layer_styles_url(self,workspace,layername):
-        return "{0}/rest/layers/{1}:{2}".format(self.geoserver_url,workspace,layername)
+        return [str(s["name"]) for s in (r.json().get("styles") or {}).get("style") or [] ]
     
     def has_style(self,workspace,stylename):
         return self.has(self.style_url(workspace,stylename),headers=self.accept_header("json"))
@@ -136,34 +140,4 @@ class StyleMixin(object):
             raise Exception("Failed to update the style({}:{}). code = {} , message = {}".format(workspace,stylename,r.status_code, r.content))
     
         logger.debug("Succeed to update the style({}:{})".format(workspace,stylename))
-    
-    def get_layer_styles(self,workspace,layername):
-        """
-        Return a tuple(default style, alternate styles)
-        """
-        r = self.get(self.layer_styles_url(workspace,layername),headers=self.accept_header("json"))
-        if r.status_code == 200:
-            r = r.json()
-            return (r.get("defaultStyle",{}).get("name",None), [d["name"] for d in r.get("styles",{}).get("style",[])])
-        else:
-            raise Exception("Failed to get styles of the featuretype({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
-    
-        LAYER_STYLES_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
-<layer>
-  {0}
-  <styles class="linked-hash-set">
-      {1}
-  </styles>
-</layer>
-    """
-    def set_layer_styles(self,workspace,layername,default_style,styles):
-        layer_styles_data = LAYER_STYLES_TEMPLATE.format(
-            "<defaultStyle><name>{}</name></defaultStyle>".format(default_style) if default_style else "",
-            os.linesep.join("<style><name>{}</name></style>".format(n) for n in styles) if styles else ""
-        )
-        r = self.put(self.layer_styles_url(workspace,layername),headers=self.contenttype_header("xml"),data=layer_styles_data)
-        if r.status_code >= 300:
-            raise Exception("Failed to set styles of the featuretype({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
-    
-        logger.debug("Succeed to set the styles of the layer({}:{}),default_style={}, styles={}".format(workspace,layername,default_style,styles))
     

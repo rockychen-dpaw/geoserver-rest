@@ -1,4 +1,5 @@
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ class SecurityMixin(object):
     <mode>{}</mode>
 </catalog>"""
     def set_catalogue_mode(self,mode):
-        data=CATALOGUE_MODE_TEMPLATE.format(mode)
+        data = self.CATALOGUE_MODE_TEMPLATE.format(mode)
         r = self.put(self.catalogue_mode_url(),data = data,headers=self.contenttype_header("xml"))
         if r.status_code >= 300:
             raise Exception("Failed to set the catalogue mode({}). code = {} , message = {}".format(mode,r.status_code, r.content))

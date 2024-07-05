@@ -44,15 +44,15 @@ class WMSStoreMixin(object):
         update a store
         return True if created;otherwise return False if update
         """
-        store_data = STORE_TEMPLATE.format(
+        store_data = self.STORE_TEMPLATE.format(
             workspace,
             storename,
-            parameters.get("capability_url"),
-            parameters.get("username") or "",
+            parameters.get("capabilitiesURL"),
+            parameters.get("user") or "",
             parameters.get("password") or "",
-            parameters.get("max_connections") or "10",
-            parameters.get("read_timeout") or "60",
-            parameters.get("connect_timeout") or "30"
+            parameters.get("maxConnections") or "10",
+            parameters.get("readTimeout") or "60",
+            parameters.get("connectTimeout") or "30"
         )
     
         if self.has_wmsstore(workspace,storename):

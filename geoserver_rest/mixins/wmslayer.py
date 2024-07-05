@@ -16,13 +16,13 @@ class WMSLayerMixin(object):
             return "{0}/rest/workspaces/{1}/wmslayers/{2}".format(self.geoserver_url,workspace,layername)
     
     def has_wmslayer(self,workspace,layername,storename=None):
-        return self.has(self.wmslayer_url(workspace,layername,storename=storename),headers=accept_header("json"))
+        return self.has(self.wmslayer_url(workspace,layername,storename=storename))
     
     def list_wmslayers(self,workspace,storename):
         """
         Return the list of layers in the store if storename is not null;otherwise return all layers in the workspace
         """
-        r = self.get(self.wmslayers_url(workspace,storename),headers=accept_header("json"))
+        r = self.get(self.wmslayers_url(workspace,storename),headers=self.accept_header("json"))
         if r.status_code >= 300:
             raise Exception("Failed to list the wmslayers in wmsstore({}:{}). code = {},message = {}".format(workspace,storename,r.status_code, r.content))
     
