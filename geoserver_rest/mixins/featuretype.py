@@ -1,10 +1,14 @@
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
 class FeaturetypeMixin(object):
-    def featuretypes_url(self,workspace,storename):
-        return "{0}/rest/workspaces/{1}/datastores/{2}/featuretypes".format(self.geoserver_url,workspace,storename)
+    def featuretypes_url(self,workspace,storename=None):
+        if storename:
+            return "{0}/rest/workspaces/{1}/datastores/{2}/featuretypes".format(self.geoserver_url,workspace,storename)
+        else:
+            return "{0}/rest/workspaces/{1}/featuretypes".format(self.geoserver_url,workspace)
     
     def featuretype_url(self,workspace,featurename,storename=None):
         if storename:
@@ -15,10 +19,17 @@ class FeaturetypeMixin(object):
     def layer_styles_url(self,workspace,layername):
         return "{0}/rest/layers/{1}:{2}".format(self.geoserver_url,workspace,layername)
     
-    def has_featuretype(self,workspace,storename,layername):
+    def has_featuretype(self,workspace,layername,storename=None):
         return self.has(self.featuretype_url(workspace,layername,storename=storename))
     
-    def list_featuretypes(self,workspace,storename):
+    def get_featuretype(self,workspace,layername,storename=None):
+        r = self.get(self.featuretype_url(workspace,layername,storename=storename),headers=self.accept_header("json"))
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        return r.json()["featureType"]
+    
+    def list_featuretypes(self,workspace,storename=None):
         r = self.get(self.featuretypes_url(workspace,storename),headers=self.accept_header("json"))
         if r.status_code >= 300:
             raise Exception("Failed to list the featuretypes in datastore({}:{}). code = {},message = {}".format(workspace,storename,r.status_code, r.content))
@@ -31,7 +42,7 @@ class FeaturetypeMixin(object):
                 self.delete_gwclayer(workspace,layername)
             return
     
-        r = self.delete("{}?recurse=true".format(self.featuretype_url(workspace,storename,layername)))
+        r = self.delete("{}?recurse=true".format(self.featuretype_url(workspace,layername,storename=storename)))
         if r.status_code >= 300:
             raise Exception("Failed to delete the featuretype({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
     
@@ -95,8 +106,8 @@ class FeaturetypeMixin(object):
     NATIVE_BOUNDING_BOX_TEMPLATE = """
         <nativeBoundingBox>
             <minx>{}</minx>
-            <maxx>{}</maxx>
             <miny>{}</miny>
+            <maxx>{}</maxx>
             <maxy>{}</maxy>
             <crs>{}</crs>
         </nativeBoundingBox>
@@ -104,13 +115,13 @@ class FeaturetypeMixin(object):
     LATLON_BOUNDING_BOX_TEMPLATE = """
         <latLonBoundingBox>
             <minx>{}</minx>
-            <maxx>{}</maxx>
             <miny>{}</miny>
+            <maxx>{}</maxx>
             <maxy>{}</maxy>
             <crs>{}</crs>
         </latLonBoundingBox>
     """
-    def publish_featuretype(self,workspace,storename,layername,parameters):
+    def publish_featuretype(self,workspace,storename,layername,parameters,create=None,recalculate="nativebbox,latlonbbox"):
         """
         Publish a new featuretype
         parameters:
@@ -157,10 +168,26 @@ class FeaturetypeMixin(object):
                 self.LATLON_BOUNDING_BOX_TEMPLATE.format(*latLonBoundingBox) if latLonBoundingBox else "",
                 "<nativeName>{}</nativeName>".format(parameters.get('nativeName')) if parameters.get('nativeName') else ""
     )
-    
-        r = self.post(self.featuretypes_url(workspace,storename),headers=self.contenttype_header("xml"),data=featuretype_data)
-        if r.status_code >= 300:
-            raise Exception("Failed to create the featuretype({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
+        if create is None:
+            featuretype = self.get_featuretype(workspace,layername)
+            if featuretype:
+                store = featuretype.get("store",{}).get("name","").split(":")[-1]
+                if store == storename:
+                    create = False
+                else:
+                    logger.debug("The featuretype({}:{}) is belonging to other store({}), delete it and create it again".format(workspace,layername,store))
+                    self.delete_featuretype(workspace,store,layername)
+                    create = True
+            else:
+                create = True
+        if create:
+            r = self.post(self.featuretypes_url(workspace,storename),headers=self.contenttype_header("xml"),data=featuretype_data)
+            if r.status_code >= 300:
+                raise Exception("Failed to create the featuretype({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
+        else:
+            r = self.put("{}?recalculate={}".format(self.featuretype_url(workspace,layername,storename=storename),recalculate or ""),headers=self.contenttype_header("xml"),data=featuretype_data)
+            if r.status_code >= 300:
+                raise Exception("Failed to update the featuretype({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
     
         logger.debug("Succeed to publish the featuretype({}:{})".format(workspace,layername))
     
@@ -171,11 +198,12 @@ class FeaturetypeMixin(object):
         r = self.get(self.layer_styles_url(workspace,layername),headers=self.accept_header("json"))
         if r.status_code == 200:
             r = r.json()
-            return (r.get("defaultStyle",{}).get("name",None), [d["name"] for d in r.get("styles",{}).get("style",[])])
+            default_style = r["layer"].get("defaultStyle",{}).get("name",None)
+            return (default_style.split(":") if default_style and ":" in default_style else (None,default_style), [d["name"].split(":") if ":" in d["name"] else [None,d["name"]] for d in r["layer"].get("styles",{}).get("style",[])])
         else:
             raise Exception("Failed to get styles of the featuretype({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
     
-        LAYER_STYLES_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+    LAYER_STYLES_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 <layer>
   {0}
   <styles class="linked-hash-set">
@@ -184,7 +212,7 @@ class FeaturetypeMixin(object):
 </layer>
     """
     def set_layer_styles(self,workspace,layername,default_style,styles):
-        layer_styles_data = LAYER_STYLES_TEMPLATE.format(
+        layer_styles_data = self.LAYER_STYLES_TEMPLATE.format(
             "<defaultStyle><name>{}</name></defaultStyle>".format(default_style) if default_style else "",
             os.linesep.join("<style><name>{}</name></style>".format(n) for n in styles) if styles else ""
         )
