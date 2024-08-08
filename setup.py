@@ -24,6 +24,7 @@ setup(
     keywords=['geoserver'],
     install_requires=[
         'requests=2.25.0',
+        'pytz=2024.1'
     ],
     classifiers=[
         'Intended Audience :: Developers',

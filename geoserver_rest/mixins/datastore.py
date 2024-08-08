@@ -3,27 +3,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
-class DatastoreMixin(object):
-    def datastores_url(self,workspace):
-        return "{0}/rest/workspaces/{1}/datastores".format(self.geoserver_url,workspace)
-    
-    def datastore_url(self,workspace,storename):
-        return "{0}/rest/workspaces/{1}/datastores/{2}".format(self.geoserver_url,workspace,storename)
-    
-    def has_datastore(self,workspace,storename):
-        return self.has(self.datastore_url(workspace,storename))
-    
-    def list_datastores(self,workspace):
-        """
-        Return the list of datastores
-        """
-        r = self.get(self.datastores_url(workspace), headers=self.accept_header("json"))
-        if r.status_code >= 300:
-            raise Exception("Failed to list the datastores in workspace({}). code = {},message = {}".format(workspace,r.status_code, r.content))
-    
-        return [str(d["name"]) for d in (r.json().get("dataStores") or {}).get("dataStore") or [] ]
-
-    GEOPACKAGE_CONNECTION_PARAMETERS = {
+GEOPACKAGE_CONNECTION_PARAMETERS = {
     "Primary key metadata table": "",
     "Callback factory":	"",
     "Evictor tests per run": 3,
@@ -46,7 +26,7 @@ class DatastoreMixin(object):
     "user": ""
 }
     
-    POSTGIS_CONNECTION_PARAMETERS = {
+POSTGIS_CONNECTION_PARAMETERS = {
     "Connection timeout": 20,
     "validate connections": True,
     "port": 5432,
@@ -81,7 +61,7 @@ class DatastoreMixin(object):
     "SSL mode":"ALLOW"
 }
 
-    SHAPEFILE_CONNECTION_PARAMETERS = {
+SHAPEFILE_CONNECTION_PARAMETERS = {
     "cache and reuse memory maps": True,
     "namespace": "",
     "filetype": "shapefile",
@@ -94,34 +74,55 @@ class DatastoreMixin(object):
     "timezone": "Australian Western Standard Time"
 }
 
-    STORE_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+STORE_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 <dataStore>
     <name>{}</name>
     <description>{}</description>
     <connectionParameters>
-        {}
+{}
     </connectionParameters>
 </dataStore>
-    """
+"""
+CONNECTION_PARAMETER_TEMPLATE = """        <entry key="{}">{}</entry>"""
+class DatastoreMixin(object):
+    def datastores_url(self,workspace):
+        return "{0}/rest/workspaces/{1}/datastores".format(self.geoserver_url,workspace)
+    
+    def datastore_url(self,workspace,storename):
+        return "{0}/rest/workspaces/{1}/datastores/{2}".format(self.geoserver_url,workspace,storename)
+    
+    def has_datastore(self,workspace,storename):
+        return self.has(self.datastore_url(workspace,storename))
+    
+    def list_datastores(self,workspace):
+        """
+        Return the list of datastores
+        """
+        r = self.get(self.datastores_url(workspace), headers=self.accept_header("json"))
+        if r.status_code >= 300:
+            raise Exception("Failed to list the datastores in workspace({}). code = {},message = {}".format(workspace,r.status_code, r.content))
+    
+        return [str(d["name"]) for d in (r.json().get("dataStores") or {}).get("dataStore") or [] ]
+
     def update_datastore(self,workspace,storename,parameters,create=None):
         """
         Return True if created; otherwise return False if update
         """
         ds_connection_parameters = None
         if any(k for k in ["host","port","schema"] if k in parameters):
-            ds_connection_parameters = self.POSTGIS_CONNECTION_PARAMETERS
+            ds_connection_parameters = POSTGIS_CONNECTION_PARAMETERS
         elif parameters.get("database","").endswith(".gpkg"):
-            ds_connection_parameters = self.GEOPACKAGE_CONNECTION_PARAMETERS
+            ds_connection_parameters = GEOPACKAGE_CONNECTION_PARAMETERS
         else:
             url = parameters.get("url")
             if not url:
                 raise Exception("Can't recognize the datastore type")
             if url.endswith(".shp"):
-                ds_connection_parameters = self.SHAPEFILE_CONNECTION_PARAMETERS
+                ds_connection_parameters = SHAPEFILE_CONNECTION_PARAMETERS
             else:
                 raise Exception("The datastore({}) Not Support".format(url))
     
-        connection_parameters = None
+        connection_parameters = {}
         for k,v in ds_connection_parameters.items():
             if k in parameters:
                 value = parameters[k]
@@ -134,13 +135,12 @@ class DatastoreMixin(object):
                 value = "true" if value else "false"
             else:
                 value = str(value)
+            connection_parameters[k] = value
     
-            if connection_parameters:
-                connection_parameters = """{}{}<entry key="{}">{}</entry>""".format(connection_parameters,os.linesep,k,value)
-            else:
-                connection_parameters = """<entry key="{}">{}</entry>""".format(k,value)
-    
-        store_data = self.STORE_TEMPLATE.format(storename,parameters.get("description",""),connection_parameters)
+        store_data = STORE_TEMPLATE.format(
+            storename,parameters.get("description",""),
+            os.linesep.join(CONNECTION_PARAMETER_TEMPLATE.format(k,v) for k,v in connection_parameters.items())
+        )
         if create is None:
             #check whether datastore exists or not.
             create = False if self.has_datastore(workspace,storename) else True

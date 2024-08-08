@@ -100,7 +100,7 @@ class FeturetypeTest(BaseTest):
         recurse = True
         try:
             test_storename = "testds4unitest"
-            parameters = {
+            store_parameters = {
                 "host": os.environ.get("POSTGIS_HOST"),
                 "port": os.environ.get("POSTGIS_PORT"),
                 "database": os.environ.get("POSTGIS_DATABASE"),
@@ -114,7 +114,7 @@ class FeturetypeTest(BaseTest):
                 "fetch size": 500
             }
             print("Try to create the datastore({}) for testing".format(test_storename))
-            self.geoserver.update_datastore(test_workspace,test_storename,parameters,create=True)
+            self.geoserver.update_datastore(test_workspace,test_storename,store_parameters,create=True)
             self.assertTrue(self.geoserver.has_datastore(test_workspace,test_storename),"The datastore({}) should be already created".format(test_storename))
             print("Create the datastore({}) successfully".format(test_storename))
 

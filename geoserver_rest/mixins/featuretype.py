@@ -3,6 +3,104 @@ import os
 
 logger = logging.getLogger(__name__)
 
+FEATURETYPE_VIEWSQL_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+    <featureType>
+        <name>{2}</name>
+        <namespace>
+            <name>{0}</name>
+        </namespace>
+        <title>{3}</title>
+        <abstract>{4}</abstract>
+        <keywords>
+            {5}
+        </keywords>
+        <srs>{6}</srs>
+        {7}
+        {8}
+        <enabled>true</enabled>
+        <store class="dataStore">
+            <name>{0}:{1}</name>
+        </store>
+        <metadata>
+            <entry key="JDBC_VIRTUAL_TABLE">
+                <virtualTable>
+                    <name>{2}</name>
+                    <sql><![CDATA[{9}]]></sql>
+                    <escapeSql>{10}</escapeSql>
+                    <geometry>
+                        <name>{11}</name>
+                        <type>{12}</type>
+                        <srid>{13}</srid>
+                    </geometry>
+                </virtualTable>
+            </entry>
+      </metadata>
+    </featureType>
+"""
+FEATURETYPE_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+    <featureType>
+        <name>{2}</name>
+        {9}
+        <namespace>
+            <name>{0}</name>
+        </namespace>
+        <title>{3}</title>
+        <abstract>{4}</abstract>
+        <keywords>
+            {5}
+        </keywords>
+        <srs>{6}</srs>
+        {7}
+        {8}
+        <enabled>true</enabled>
+        <store class="dataStore">
+            <name>{0}:{1}</name>
+        </store>
+    </featureType>
+"""
+"""
+minx: west longitude
+miny: south latitude
+maxx: east longitude
+maxy: north logitude
+"""
+NATIVE_BOUNDING_BOX_TEMPLATE = """
+        <nativeBoundingBox>
+            <minx>{}</minx>
+            <miny>{}</miny>
+            <maxx>{}</maxx>
+            <maxy>{}</maxy>
+            <crs>{}</crs>
+        </nativeBoundingBox>
+"""
+"""
+minx: west longitude
+miny: south latitude
+maxx: east longitude
+maxy: north logitude
+"""
+LATLON_BOUNDING_BOX_TEMPLATE = """
+        <latLonBoundingBox>
+            <minx>{}</minx>
+            <miny>{}</miny>
+            <maxx>{}</maxx>
+            <maxy>{}</maxy>
+            <crs>{}</crs>
+        </latLonBoundingBox>
+"""
+LAYER_STYLES_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+<layer>
+  {0}
+  <styles class="linked-hash-set">
+      {1}
+  </styles>
+</layer>
+"""
+KEYWORD_TEMPLATE = """<string>{}</string>"""
+DEFAULT_STYLE_TEMPLATE = """<defaultStyle><name>{}</name></defaultStyle>"""
+STYLE_TEMPLATE = """<style><name>{}</name></style>"""
+NATIVENAME_TEMPLATE = """<nativeName>{}</nativeName>"""
+
 class FeaturetypeMixin(object):
     def featuretypes_url(self,workspace,storename=None):
         if storename:
@@ -48,79 +146,6 @@ class FeaturetypeMixin(object):
     
         logger.debug("Succeed to delete the featuretype({}:{})".format(workspace,layername))
     
-    FEATURETYPE_VIEWSQL_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
-    <featureType>
-        <name>{2}</name>
-        <namespace>
-            <name>{0}</name>
-        </namespace>
-        <title>{3}</title>
-        <abstract>{4}</abstract>
-        <keywords>
-            {5}
-        </keywords>
-        <srs>{6}</srs>
-        {7}
-        {8}
-        <enabled>true</enabled>
-        <store class="dataStore">
-            <name>{0}:{1}</name>
-        </store>
-        <metadata>
-            <entry key="JDBC_VIRTUAL_TABLE">
-                <virtualTable>
-                    <name>{2}</name>
-                    <sql><![CDATA[{9}]]></sql>
-                    <escapeSql>{10}</escapeSql>
-                    <geometry>
-                        <name>{11}</name>
-                        <type>{12}</type>
-                        <srid>{13}</srid>
-                    </geometry>
-                </virtualTable>
-            </entry>
-      </metadata>
-    </featureType>
-    """
-    FEATURETYPE_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
-    <featureType>
-        <name>{2}</name>
-        {9}
-        <namespace>
-            <name>{0}</name>
-        </namespace>
-        <title>{3}</title>
-        <abstract>{4}</abstract>
-        <keywords>
-            {5}
-        </keywords>
-        <srs>{6}</srs>
-        {7}
-        {8}
-        <enabled>true</enabled>
-        <store class="dataStore">
-            <name>{0}:{1}</name>
-        </store>
-    </featureType>
-    """
-    NATIVE_BOUNDING_BOX_TEMPLATE = """
-        <nativeBoundingBox>
-            <minx>{}</minx>
-            <miny>{}</miny>
-            <maxx>{}</maxx>
-            <maxy>{}</maxy>
-            <crs>{}</crs>
-        </nativeBoundingBox>
-    """
-    LATLON_BOUNDING_BOX_TEMPLATE = """
-        <latLonBoundingBox>
-            <minx>{}</minx>
-            <miny>{}</miny>
-            <maxx>{}</maxx>
-            <maxy>{}</maxy>
-            <crs>{}</crs>
-        </latLonBoundingBox>
-    """
     def publish_featuretype(self,workspace,storename,layername,parameters,create=None,recalculate="nativebbox,latlonbbox"):
         """
         Publish a new featuretype
@@ -139,16 +164,16 @@ class FeaturetypeMixin(object):
         nativeBoundingBox = parameters.get("nativeBoundingBox") or parameters.get("boundingBox")
         latLonBoundingBox = parameters.get("latLonBoundingBox") or parameters.get("boundingBox")
         if parameters.get('viewsql'):
-            featuretype_data = self.FEATURETYPE_VIEWSQL_TEMPLATE.format(
+            featuretype_data = FEATURETYPE_VIEWSQL_TEMPLATE.format(
                 workspace,
                 storename,
                 layername,
                 self.encode_xmltext(parameters.get("title",layername)), 
                 self.encode_xmltext(parameters.get("abstract","")),
-                os.linesep.join("<string>{}</string>".format(k) for k in  parameters.get('keywords', [])), 
+                os.linesep.join(KEYWORD_TEMPLATE.format(k) for k in  parameters.get('keywords', [])), 
                 parameters.get("srs","EPSG:4326"),
-                self.NATIVE_BOUNDING_BOX_TEMPLATE.format(*nativeBoundingBox) if nativeBoundingBox else "",
-                self.LATLON_BOUNDING_BOX_TEMPLATE.format(*latLonBoundingBox) if latLonBoundingBox else "",
+                NATIVE_BOUNDING_BOX_TEMPLATE.format(*nativeBoundingBox) if nativeBoundingBox else "",
+                LATLON_BOUNDING_BOX_TEMPLATE.format(*latLonBoundingBox) if latLonBoundingBox else "",
                 parameters.get('viewsql'),
                 parameters.get("escapeSql","false"),
                 parameters.get("geometry_column"),
@@ -156,17 +181,17 @@ class FeaturetypeMixin(object):
                 parameters.get("srs","EPSG:4326")[5:]
             )
         else:
-            featuretype_data = self.FEATURETYPE_TEMPLATE.format(
+            featuretype_data = FEATURETYPE_TEMPLATE.format(
                 workspace,
                 storename,
                 layername,
                 self.encode_xmltext(parameters.get("title",layername)), 
                 self.encode_xmltext(parameters.get("abstract","")),
-                os.linesep.join("<string>{}</string>".format(k) for k in  parameters.get('keywords', [])) if parameters.get('keywords') else "", 
+                os.linesep.join(KEYWORD_TEMPLATE.format(k) for k in  parameters.get('keywords', [])) if parameters.get('keywords') else "", 
                 parameters.get("srs","EPSG:4326"),
-                self.NATIVE_BOUNDING_BOX_TEMPLATE.format(*nativeBoundingBox) if nativeBoundingBox else "",
-                self.LATLON_BOUNDING_BOX_TEMPLATE.format(*latLonBoundingBox) if latLonBoundingBox else "",
-                "<nativeName>{}</nativeName>".format(parameters.get('nativeName')) if parameters.get('nativeName') else ""
+                NATIVE_BOUNDING_BOX_TEMPLATE.format(*nativeBoundingBox) if nativeBoundingBox else "",
+                LATLON_BOUNDING_BOX_TEMPLATE.format(*latLonBoundingBox) if latLonBoundingBox else "",
+                NATIVENAME_TEMPLATE.format(parameters.get('nativeName')) if parameters.get('nativeName') else ""
     )
         if create is None:
             featuretype = self.get_featuretype(workspace,layername)
@@ -193,28 +218,30 @@ class FeaturetypeMixin(object):
     
     def get_layer_styles(self,workspace,layername):
         """
-        Return a tuple(default style, alternate styles)
+        Return a tuple(default style, alternate styles); return None if layer doesn't exist
         """
         r = self.get(self.layer_styles_url(workspace,layername),headers=self.accept_header("json"))
         if r.status_code == 200:
             r = r.json()
             default_style = r["layer"].get("defaultStyle",{}).get("name",None)
-            return (default_style.split(":") if default_style and ":" in default_style else (None,default_style), [d["name"].split(":") if ":" in d["name"] else [None,d["name"]] for d in r["layer"].get("styles",{}).get("style",[])])
+            if isinstance(r["layer"].get("styles",{}).get("style",[]),list):
+                return (
+                    default_style.split(":") if default_style and ":" in default_style else (None,default_style), 
+                    [d["name"].split(":") if ":" in d["name"] else [None,d["name"]] for d in r["layer"].get("styles",{}).get("style",[])])
+            else:
+                style = r["layer"].get("styles",{}).get("style")
+                return (
+                    default_style.split(":") if default_style and ":" in default_style else (None,default_style), 
+                    [style["name"].split(":") if ":" in style["name"] else [None,style["name"]]])
+        elif r.status_code == 404:
+           return None
         else:
             raise Exception("Failed to get styles of the featuretype({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
     
-    LAYER_STYLES_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
-<layer>
-  {0}
-  <styles class="linked-hash-set">
-      {1}
-  </styles>
-</layer>
-    """
     def set_layer_styles(self,workspace,layername,default_style,styles):
-        layer_styles_data = self.LAYER_STYLES_TEMPLATE.format(
-            "<defaultStyle><name>{}</name></defaultStyle>".format(default_style) if default_style else "",
-            os.linesep.join("<style><name>{}</name></style>".format(n) for n in styles) if styles else ""
+        layer_styles_data = LAYER_STYLES_TEMPLATE.format(
+            DEFAULT_STYLE_TEMPLATE.format(default_style) if default_style else "",
+            os.linesep.join(STYLE_TEMPLATE.format(n) for n in styles) if styles else ""
         )
         r = self.put(self.layer_styles_url(workspace,layername),headers=self.contenttype_header("xml"),data=layer_styles_data)
         if r.status_code >= 300:

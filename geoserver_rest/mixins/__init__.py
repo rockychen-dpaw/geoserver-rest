@@ -9,3 +9,4 @@ from .style import StyleMixin
 from .wmslayer import WMSLayerMixin
 from .wmsstore import WMSStoreMixin
 from .workspace import WorkspaceMixin
+from .usergroup import UsergroupMixin

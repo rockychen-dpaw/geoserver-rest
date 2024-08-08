@@ -2,6 +2,30 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+GROUP_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+<layerGroup>
+    <name>{1}</name>
+    <mode>SINGLE</mode>
+    <title>{}</title>
+    <abstract>{}</abstract>
+    <workspace>
+        <name>{0}</name>
+    </workspace>
+    <publishables>
+        {5}
+    </publishables>
+    <keywords>
+        {4}
+    </keywords>
+</layerGroup>
+"""
+PUBLISHED_TEMPLATE = """
+        <published type="{}">
+            <name>{}:{}</name>
+        </published>
+"""
+KEYWORD_TEMPLATE = """<string>{}</string>"""
+
 class LayergroupMixin(object):
     def layergroups_url(self,workspace):
         return "{0}/rest/workspaces/{1}/layergroups".format(self.geoserver_url,workspace)
@@ -35,28 +59,6 @@ class LayergroupMixin(object):
         logger.debug("Succeed to delete the layergroup({}:{})".format(workspace,groupname))
         return True
     
-    GROUP_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
-<layerGroup>
-    <name>{1}</name>
-    <mode>SINGLE</mode>
-    <title>{}</title>
-    <abstract>{}</abstract>
-    <workspace>
-        <name>{0}</name>
-    </workspace>
-    <publishables>
-        {5}
-    </publishables>
-    <keywords>
-        {4}
-    </keywords>
-</layerGroup>
-"""
-    PUBLISHED_TEMPLATE = """
-        <published type="{}">
-            <name>{}:{}</name>
-        </published>
-"""
     def update_layergroup(geoserver_url,username,password,workspace,groupname,parameters):
         """
         parameters:
@@ -71,7 +73,7 @@ class LayergroupMixin(object):
             groupname,
             self.encode_xmltext(parameters.get("title")),
             encode_xmltext(parameters.get("abstract")),
-            os.linesep.join("<string>{}</string>".format(k) for k in  parameters.get('keywords', [])), 
+            os.linesep.join(KEYWORD_TEMPLATE.format(k) for k in  parameters.get('keywords', [])), 
             os.linesep.join(PUBLISHED_TEMPLATE.format(
                 "layerGroup" if layer["type"] == "group" else "layer",
                 layer["workspace"],

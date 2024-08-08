@@ -2,6 +2,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+WORKSPACE_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+<workspace>
+    <name>{}</name>
+</workspace>
+"""
 class WorkspaceMixin(object):
     def workspaces_url(self):
         return "{0}/rest/workspaces".format(self.geoserver_url)
@@ -22,16 +27,11 @@ class WorkspaceMixin(object):
     
         return [str(w["name"]) for w in (r.json().get("workspaces") or {}).get("workspace") or [] ]
     
-    WORKSPACE_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
-<workspace>
-    <name>{}</name>
-</workspace>
-"""
     def create_workspace(self,workspace):
         """
         Return true if created; otherwise return False if already exist
         """
-        data = self.WORKSPACE_TEMPLATE.format(workspace)
+        data = WORKSPACE_TEMPLATE.format(workspace)
         r = self.post(self.workspaces_url(),data=data,headers=self.contenttype_header("xml"))
         if r.status_code >= 300:
             if self.has_workspace(workspace):

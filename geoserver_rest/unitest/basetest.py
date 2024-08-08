@@ -5,6 +5,11 @@ from ..geoserver import Geoserver
 
 class BaseTest(unittest.TestCase):
     _instance = None
+    """
+    BBOX (mixx,miny,maxx,maxy) or (left bottom coord, right top coord)
+    """
+    BBOX_AUSTRALIA = (113.338953078, -43.6345972634, 153.569469029, -10.6681857235)
+    BBOX_WA = (112.839347,-35.180249,129,-13.713391)
 
     @classmethod
     def instance(cls):

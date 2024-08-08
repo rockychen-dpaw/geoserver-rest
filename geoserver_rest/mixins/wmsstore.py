@@ -2,6 +2,26 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+STORE_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+<wmsStore>
+    <name>{1}</name>
+    <type>WMS</type>
+    <enabled>true</enabled>
+    <workspace>
+        <name>{0}</name>
+    </workspace>
+    <metadata>
+        <entry key="useConnectionPooling">true</entry>
+    </metadata>
+    <__default>true</__default>
+    <capabilitiesURL><![CDATA[{2}]]></capabilitiesURL>
+    <user>{3}</user>
+    <password>{4}</password>
+    <maxConnections>{5}</maxConnections>
+    <readTimeout>{6}</readTimeout>
+    <connectTimeout>{7}</connectTimeout>
+</wmsStore>
+"""
 class WMSStoreMixin(object):
     def wmsstores_url(self,workspace):
         return "{0}/rest/workspaces/{1}/wmsstores".format(self.geoserver_url,workspace)
@@ -19,32 +39,12 @@ class WMSStoreMixin(object):
     
         return [str(s["name"]) for s in (r.json().get("wmsStores") or {}).get("wmsStore") or [] ]
     
-    STORE_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
-<wmsStore>
-    <name>{1}</name>
-    <type>WMS</type>
-    <enabled>true</enabled>
-    <workspace>
-        <name>{0}</name>
-    </workspace>
-    <metadata>
-        <entry key="useConnectionPooling">true</entry>
-    </metadata>
-    <__default>true</__default>
-    <capabilitiesURL><![CDATA[{2}]]></capabilitiesURL>
-    <user>{}</user>
-    <password>{}</password>
-    <maxConnections>{}</maxConnections>
-    <readTimeout>{}</readTimeout>
-    <connectTimeout>{}</connectTimeout>
-</wmsStore>
-"""
-    def update_wmsstore(self,workspace,storename,parameters):
+    def update_wmsstore(self,workspace,storename,parameters,create=None):
         """
         update a store
         return True if created;otherwise return False if update
         """
-        store_data = self.STORE_TEMPLATE.format(
+        store_data = STORE_TEMPLATE.format(
             workspace,
             storename,
             parameters.get("capabilitiesURL"),
@@ -54,25 +54,22 @@ class WMSStoreMixin(object):
             parameters.get("readTimeout") or "60",
             parameters.get("connectTimeout") or "30"
         )
-    
-        if self.has_wmsstore(workspace,storename):
-            r = self.put(self.wmsstore_url(workspace,storename), headers=self.contenttype_header("xml"), data=store_data)
-            created = False
-        else:
-            r = func(self.wmsstores_url(workspace), headers=self.contenttype_header("xml"), data=store_data)
-            created = True
+        if create is None:
+            create = False if self.has_wmsstore(workspace,storename) else True
 
-        if r.status_code >= 300:
-            raise Exception("Failed to {} the wmsstore({}:{}). code = {} , message = {}".format("create" if created else "update",workspace,storename,r.status_code, r.content))
-        
-        if created:
+        if create:
+            r = self.post(self.wmsstores_url(workspace), headers=self.contenttype_header("xml"), data=store_data)
+            if r.status_code >= 300:
+                raise Exception("Failed to create the wmsstore({}:{}). code = {} , message = {}".format(workspace,storename,r.status_code, r.content))
             logger.debug("Succeed to create the wmsstore({}:{}). ".format(workspace,storename))
             return True
         else:
+            r = self.put(self.wmsstore_url(workspace,storename), headers=self.contenttype_header("xml"), data=store_data)
+            if r.status_code >= 300:
+                raise Exception("Failed to update the wmsstore({}:{}). code = {} , message = {}".format(workspace,storename,r.status_code, r.content))
             logger.debug("Succeed to update the wmsstore({}:{}). ".format(workspace,storename))
             return False
-            
-    
+
     def delete_wmsstore(self,workspace,storename,recurse=False):
         """
         Return True if deleted;otherwise return False if doesn't exsit before

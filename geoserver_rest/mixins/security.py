@@ -3,6 +3,17 @@ import os
 
 logger = logging.getLogger(__name__)
 
+CATALOGUE_MODE_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+<catalog>
+    <mode>{}</mode>
+</catalog>
+"""
+RULES_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+<rules>
+    {}
+</rules>
+"""
+RULE_TEMPLATE = """<rule resource="{0}">{1}</rule>"""
 class SecurityMixin(object):
     def catalogue_mode_url(self):
         return "{0}/rest/security/acl/catalog".format(self.geoserver_url)
@@ -21,12 +32,8 @@ class SecurityMixin(object):
         else:
             raise Exception("Failed to get catalogue mode. code = {} , message = {}".format(r.status_code, r.content))
     
-    CATALOGUE_MODE_TEMPLATE="""<?xml version="1.0" encoding="UTF-8"?>
-<catalog>
-    <mode>{}</mode>
-</catalog>"""
     def set_catalogue_mode(self,mode):
-        data = self.CATALOGUE_MODE_TEMPLATE.format(mode)
+        data = CATALOGUE_MODE_TEMPLATE.format(mode)
         r = self.put(self.catalogue_mode_url(),data = data,headers=self.contenttype_header("xml"))
         if r.status_code >= 300:
             raise Exception("Failed to set the catalogue mode({}). code = {} , message = {}".format(mode,r.status_code, r.content))
@@ -65,19 +72,13 @@ class SecurityMixin(object):
                 new_rules[permission] = groups
     
         if update_rules:
-            data="""<?xml version="1.0" encoding="UTF-8"?>
-<rules>
-    {}
-</rules>""".format(os.linesep.join("""<rule resource="{0}">{1}</rule>""".format(k,v) for k,v in update_rules.items()))
+            data = RULES_TEMPLATE.format(os.linesep.join(RULE_TEMPLATE.format(k,v) for k,v in update_rules.items()))
             r = self.put(self.layer_access_rules_url(),data=data,headers=self.contenttype_header("xml"))
             if r.status_code >= 300:
                 raise Exception("Failed to update layer access rules({}). code = {} , message = {}".format(update_rules,r.status_code, r.content))
     
         if new_rules:
-            data="""<?xml version="1.0" encoding="UTF-8"?>
-<rules>
-    {}
-</rules>""".format(os.linesep.join("""<rule resource="{0}">{1}</rule>""".format(k,v) for k,v in new_rules.items()))
+            data = RULES_TEMPLATE.format(os.linesep.join(RULE_TEMPLATE.format(k,v) for k,v in new_rules.items()))
             r = self.post(self.layer_access_rules_url(),data=data,headers=self.contenttype_header("xml"))
             if r.status_code >= 300:
                 raise Exception("Failed to create layer access rules({}). code = {} , message = {}".format(new_rules,r.status_code, r.content))
