@@ -8,11 +8,10 @@ class Task(object):
     queuetime = None
     starttime = None
     endtime = None
-    exception = None
+    exceptions = None
     category = None
 
     result = None
-    post_actions = None
 
     arguments = None
     post_actions_factory = None
@@ -21,31 +20,6 @@ class Task(object):
         self.queuetime = timezone.localtime()
         if post_actions_factory:
             self.post_actions_factory = post_actions_factory
-            post_actions = self.post_actions_factory(self.category)
-            if post_actions:
-                self.post_actions = post_actions
-
-    def add_postaction(self,post_action):
-        """
-        Add a post action or a list of post actions
-        """
-        if not post_action:
-            return
-        if isinstance(post_action,(list,tuple)):
-            if not self.post_actions:
-                self.post_actions = post_action
-            else:
-                if isinstance(self.post_actions,tuple):
-                    self.post_actions = list(self.post_actions)
-                for a in post_action:
-                    self.post_actions.append(a)
-        else:
-            if not self.post_actions:
-                self.post_actions = [post_action]
-            else:
-                if isinstance(self.post_actions,tuple):
-                    self.post_actions = list(self.post_actions)
-                self.post_actions.append(post_action)
 
     @property
     def parameters(self):
@@ -62,38 +36,58 @@ class Task(object):
 
     @property
     def exec_result(self):
-        if self.is_failed:
-            return str(self.exception)
-        elif self.is_succeed:
-            return self._format_result()
+        for ex in self.exceptions or []:
+            try:
+                raise ex
+            except Exception as ex:
+                traceback.print_exc()
+        msg = ""
+        if self.is_succeed:
+            if self.exceptions:
+               return "{}\r\n{}".format(self._format_result,"\r\n".join(str(ex) for ex in self.exceptions))
+            else:
+               return self._format_result()
+        elif self.exceptions:
+            return "\r\n".join(str(ex) for ex in self.exceptions)
         else:
             return ""
 
     def _format_result(self):
         return json.dumps(self.result) if self.result else ""
 
-    def report_rows(self):
+    @property
+    def reportheader(self):
+        return ["Task Category","Task Parameters","Status","Execute Starttime","Execute Endtime","Process Time","Execute Result"]
+
+    def reportrows(self):
         yield (self.category,
             self.format_parameters("\r\n"),
             self.status,
             timezone.format(self.starttime,"%Y-%m-%d %H:%M:%S.%f") if self.starttime else "",
             timezone.format(self.endtime,"%Y-%m-%d %H:%M:%S.%f") if self.endtime else "",
+            (self.endtime - self.starttime).total_seconds() if self.starttime and self.endtime else "",
             self.exec_result
         )
+
+    @property
+    def warningheader(self):
+        return ["Task Category","Task Parameters","Level","Execute Starttime","Execute Endtime","Process Time","Message"]
+
     def warnings(self):
         """
         Report the execute exception and the warnings and errors from task result
         """
-        if self.is_failed:
+        if self.exceptions:
             yield (self.category,
                 self.format_parameters("\r\n"),
                 "Error",
                 timezone.format(self.starttime,"%Y-%m-%d %H:%M:%S.%f") if self.starttime else "",
                 timezone.format(self.endtime,"%Y-%m-%d %H:%M:%S.%f") if self.endtime else "",
-                str(self.exception)
+                "\r\n".join(str(ex) for ex in self.exceptions)
             )
-        elif self.is_succeed:
-            for r in self._warnings():
+
+        if self.is_succeed:
+            for r in (self._warnings() or []):
                 yield r
 
     def _warnings(self):
@@ -127,25 +121,36 @@ class Task(object):
 
     @property
     def is_succeed(self):
-        return True if (self.starttime is not None and self.endtime is not None and  self.exception is None) else False
+        return True if (self.starttime is not None and self.endtime is not None and  self.result) else False
 
     @property
     def is_failed(self):
-        return True if (self.starttime is not None and self.endtime is not None and  self.exception is not None) else False
+        return True if (self.starttime is not None and self.endtime is not None and  self.result is None) else False
 
     def run(self,geoserver):
         self.starttime = timezone.localtime()
         try:
             self.result = self._exec(geoserver)
-            if self.post_actions:
-                for action in self.post_actions:
-                    action(self)
         except Exception as ex:
             traceback.print_exc()
-            self.exception = ex
+            self.exceptions = [ex]
+            self.result = None
         finally:
             self.endtime = timezone.localtime()
 
+        if self.post_actions_factory:
+            post_actions = self.post_actions_factory(self.category)
+            if post_actions:
+                for action in post_actions:
+                    try:
+                       action(self)
+                    except Exception as ex:
+                        traceback.print_exc()
+                        if self.exceptions:
+                            self.exceptions.append(ex)
+                        else:
+                            self.exceptions = [ex]
+                        
     def _exec(self,geoserver):
         raise Exception("Not implemented")
 

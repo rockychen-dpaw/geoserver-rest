@@ -14,7 +14,10 @@ class ListDatastores(Task):
             self.workspace = workspace
 
     def _format_result(self):
-        return "\r\n".join("Workspace : {} , Datastores : {}".format(w,len(stores)) for w,stores in self.result)
+        if self.workspace:
+            return "Datastores : {}".format(len(self.result[0][1]))
+        else:
+            return "\r\n".join("Workspace : {} , Datastores : {}".format(w,len(stores)) for w,stores in self.result)
 
     def _exec(self,geoserver):
         if self.workspace:

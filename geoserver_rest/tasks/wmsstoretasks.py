@@ -14,7 +14,10 @@ class ListWMSstores(Task):
             self.workspace = workspace
 
     def _format_result(self):
-        return "\r\n".join("Workspace : {} , WMSStores : {}".format(w,len(stores)) for w,stores in self.result)
+        if self.workspace:
+            return "WMSstores : {}".format(len(self.result[0][1]))
+        else:
+            return "\r\n".join("Workspace : {} , WMSstores : {}".format(w,len(stores)) for w,stores in self.result)
 
     def _exec(self,geoserver):
         if self.workspace:

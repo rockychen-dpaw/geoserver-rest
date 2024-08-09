@@ -1,4 +1,5 @@
 from .base import Task
+from .. import timezone
 
 class ListFeatureTypes(Task):
     """
@@ -16,7 +17,13 @@ class ListFeatureTypes(Task):
                 self.datastore = datastore
 
     def _format_result(self):
-        return "\r\n".join("Workspace : {}\r\n{}".format(w,"\r\n".join("    Datastore : {} , Featuretypes : {}".format(store,len(featuretypes)) for store,featuretypes in storedatas)) for w,storedatas in self.result if storedatas)
+        if self.workspace:
+            if self.datastore:
+                return "Featuretypes : {}".format(len(self.result[0][1][0][1]))
+            else:
+                return "\r\n".join("Datastore : {} , Featuretypes : {}".format(store,len(featuretypes)) for store,featuretypes in self.result[0][1])
+        else:
+            return "\r\n".join("Workspace : {}\r\n{}".format(w,"\r\n".join("    Datastore : {} , Featuretypes : {}".format(store,len(featuretypes)) for store,featuretypes in storedatas)) for w,storedatas in self.result)
 
     def _exec(self,geoserver):
         if self.workspace:
@@ -39,11 +46,11 @@ class ListFeatureTypes(Task):
         for workspace,storedatas in self.result:
             for store,layers in storedatas:
                 if not layers:
-                    yield (self.key,
+                    yield (self.categoty,
                         "Warning",
                         timezone.format(self.starttime,"%Y-%m-%d %H:%M:%S.%f") if self.starttime else "",
                         timezone.format(self.endtime,"%Y-%m-%d %H:%M:%S.%f") if self.endtime else "",
-                        "The datastore({}) is empty, can be deleted.".format(store)
+                        "The datastore({}) is empty.".format(store)
                     )
 
 class GetFeatureTypeStyles(Task):
@@ -65,13 +72,53 @@ class GetFeatureTypeStyles(Task):
                 if featuretype:
                     self.featuretype = featuretype
 
-    def _format_result(self):
-        msg = "\r\n".join("Workspace : {}\r\n{}".format(
-            w,
-            "\r\n".join("    Datastore : {} , Featuretypes : {}".format(s,len(featuretypes)) for s,featuretypes in storedata)
-        ) for w,storedata in self.result )
+    @staticmethod
+    def get_layers_has_customizedstyle(featuretypesdata):
+        layers_has_customized_defaultstyle = 0
+        layers_has_customized_alternativestyle = 0
+        for featuretype,stylesdata in featuretypesdata:
+            defaultstyle,alternativestyles = stylesdata
+            if defaultstyle[0] != None or defaultstyle[1] not in ("generic","line","point","polygon","raster"):
+                layers_has_customized_defaultstyle += 1
+            for style in alternativestyles:
+                if style[0] != None or style[1] not in ("generic","line","point","polygon","raster"):
+                    layers_has_customized_alternativestyle += 1
+                    break
+        return (layers_has_customized_defaultstyle,layers_has_customized_alternativestyle)
 
-        return "Get default and alternative styles for featuretypes.\r\n{}".format(msg)
+    def _format_result(self):
+        if self.workspace:
+            if self.datastore:
+                if self.featuretype:
+                    featuretypedata = self.result[0][1][0][1][0]
+                    msg = "Featuretypes : {} , Default Style : {} ,  Alternative Styles : [{}] ".format(
+                              featuretypedata[0],
+                              "{}:{}".format(*featuretypedata[1][0]) if featuretypedata[1][0][0] else featuretypedata[1][0][1],
+                              ", ".join(("{}:{}".format(*style) if style[0] else style[1]) for style in (featuretypedata[1][1] or []))
+                           )
+                else:
+                    storedata = self.result[0][1][0]
+                    msg = "Featuretypes : {} , layers has customized default style : {} , layers has customized alternative style : {}".format(
+                            len(storedata[1]),
+                            *self.get_layers_has_customizedstyle(storedata[1])
+                        )
+            else:
+                msg = "\r\n".join("Datastore : {} , Featuretypes : {} , layers has customized default style : {} , layers has customized alternative style : {}".format(
+                        s,
+                        len(featuretypesdata),
+                        *self.get_layers_has_customizedstyle(featuretypesdata)) for s,featuretypesdata in (self.result[0][1] or [])
+                    )
+        else:
+            msg = "\r\n".join("Workspace : {}\r\n{}".format(
+                w,
+                "\r\n".join("    Datastore : {} , Featuretypes : {} , layers has customized default style : {} , layers has customized alternative style : {}".format(
+                    s,
+                    len(featuretypesdata),
+                    *self.get_layers_has_customizedstyle(featuretypesdata)) for s,featuretypesdata in storesdata
+                )
+            ) for w,storesdata in self.result )
+
+        return msg
 
     def _exec(self,geoserver):
         if self.workspace:
