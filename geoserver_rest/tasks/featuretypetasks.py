@@ -46,12 +46,7 @@ class ListFeatureTypes(Task):
         for workspace,storedatas in self.result:
             for store,layers in storedatas:
                 if not layers:
-                    yield (self.categoty,
-                        "Warning",
-                        timezone.format(self.starttime,"%Y-%m-%d %H:%M:%S.%f") if self.starttime else "",
-                        timezone.format(self.endtime,"%Y-%m-%d %H:%M:%S.%f") if self.endtime else "",
-                        "The datastore({}) is empty.".format(store)
-                    )
+                    yield "The datastore({}) is empty.".format(store)
 
 class GetFeatureTypeStyles(Task):
     """

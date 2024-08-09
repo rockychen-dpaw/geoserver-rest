@@ -36,19 +36,14 @@ class Task(object):
 
     @property
     def exec_result(self):
-        for ex in self.exceptions or []:
-            try:
-                raise ex
-            except Exception as ex:
-                traceback.print_exc()
         msg = ""
         if self.is_succeed:
             if self.exceptions:
-               return "{}\r\n{}".format(self._format_result,"\r\n".join(str(ex) for ex in self.exceptions))
+               return "{}\r\n{}".format(self._format_result(),"\r\n".join("{}({})".format(ex.__class__.__name__,str(ex)) for ex in self.exceptions))
             else:
                return self._format_result()
         elif self.exceptions:
-            return "\r\n".join(str(ex) for ex in self.exceptions)
+            return "\r\n".join("{}({})".format(ex.__class__.__name__,str(ex)) for ex in self.exceptions)
         else:
             return ""
 
@@ -83,12 +78,20 @@ class Task(object):
                 "Error",
                 timezone.format(self.starttime,"%Y-%m-%d %H:%M:%S.%f") if self.starttime else "",
                 timezone.format(self.endtime,"%Y-%m-%d %H:%M:%S.%f") if self.endtime else "",
-                "\r\n".join(str(ex) for ex in self.exceptions)
+                (self.endtime - self.starttime).total_seconds() if self.starttime and self.endtime else "",
+                "\r\n".join("{}({})".format(ex.__class__.__name__,str(ex)) for ex in self.exceptions)
             )
 
         if self.is_succeed:
-            for r in (self._warnings() or []):
-                yield r
+            for msg in (self._warnings() or []):
+                yield (self.category,
+                    self.format_parameters("\r\n"),
+                    "Warning",
+                    timezone.format(self.starttime,"%Y-%m-%d %H:%M:%S.%f") if self.starttime else "",
+                    timezone.format(self.endtime,"%Y-%m-%d %H:%M:%S.%f") if self.endtime else "",
+                    (self.endtime - self.starttime).total_seconds() if self.starttime and self.endtime else "",
+                    msg
+            )
 
     def _warnings(self):
         """

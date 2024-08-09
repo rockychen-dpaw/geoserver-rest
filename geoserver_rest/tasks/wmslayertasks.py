@@ -26,12 +26,7 @@ class ListWMSLayers(Task):
         for workspace,storedatas in self.result:
             for store,layers in storedatas:
                 if not layers:
-                    yield (self.category,
-                        "Warning",
-                        timezone.format(self.starttime,"%Y-%m-%d %H:%M:%S.%f") if self.starttime else "",
-                        timezone.format(self.endtime,"%Y-%m-%d %H:%M:%S.%f") if self.endtime else "",
-                        "The wmsstore({}) is empty.".format(store)
-                    )
+                    yield "The wmsstore({}) is empty.".format(store)
     def _exec(self,geoserver):
         if self.workspace:
             if self.wmsstore:
