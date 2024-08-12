@@ -1,6 +1,9 @@
 import threading
 import queue
 import collections
+import logging
+
+logger = logging.getLogger(__name__)
 
 class TaskRunner(object):
     endtask = object()
@@ -29,7 +32,7 @@ class TaskRunner(object):
         Wait until all tasks are finished
         """
         self.tasks.join()
-        print("All tasks({}) are finished.".format(self.total_tasks))
+        logger.info("All tasks({}) are finished.".format(self.total_tasks))
 
     def wait_to_shutdown(self):
         """
@@ -58,12 +61,12 @@ class TaskWorker(threading.Thread):
         self.start()
 
     def run(self):
-        print("The task worker({}) is running.".format(self.name))
+        logger.info("The task worker({}) is running.".format(self.name))
         while True:
             try:
                 task = self.runner.tasks.get(block=True,timeout=None)
             except Exception as ex:
-                print("The task worker({}) was interrupted.{}".format(self.name,str(ex)))
+                logger.warning("The task worker({}) was interrupted.{}".format(self.name,str(ex)))
                 break
             if not task:
                 continue
@@ -71,13 +74,13 @@ class TaskWorker(threading.Thread):
                 #end
                 self.runner.tasks.task_done()
                 break
-            print("Begin to run task: {}({})".format(task.category,task.format_parameters(", ")))
+            logger.debug("{0} : Begin to run task {1}({2})".format(self.name,task.category,task.format_parameters(", ")))
             task.run(self.runner.geoserver)
             self.runner.finished_tasks.put(task)
             self.runner.tasks.task_done()
-            print("{2} to run task: {0}({1}) = {3}".format(task.category,task.format_parameters(", "),"Succeed" if task.is_succeed else "Failed",task.exec_result))
+            logger.debug("{0} : {3} to run task {1}({2})".format(self.name,task.category,task.format_parameters(", "),"Succeed" if task.is_succeed else "Failed"))
 
-        print("The task worker({}) is terminated.".format(self.name))
+        logger.info("The task worker({}) is terminated.".format(self.name))
             
 
 

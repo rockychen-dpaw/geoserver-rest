@@ -1,5 +1,6 @@
 import logging
 import os
+import xml.etree.ElementTree as ET
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,10 @@ class FeaturetypeMixin(object):
     
     def layer_styles_url(self,workspace,layername):
         return "{0}/rest/layers/{1}:{2}".format(self.geoserver_url,workspace,layername)
-    
+
+    def featurecount_url(self,workspace,layername):
+        return "{}/wfs?service=wfs&version=2.0.0&request=GetFeature&outputFormat=application%2Fxml&typeNames={}:{}&resultType=hits".format(self.geoserver_url,workspace,layername)
+
     def has_featuretype(self,workspace,layername,storename=None):
         return self.has(self.featuretype_url(workspace,layername,storename=storename))
     
@@ -126,6 +130,15 @@ class FeaturetypeMixin(object):
             return None
         r.raise_for_status()
         return r.json()["featureType"]
+    
+    def get_featurecount(self,workspace,layername,storename=None):
+        r = self.get(self.featurecount_url(workspace,layername),headers=self.accept_header("xml"))
+        r.raise_for_status()
+        try:
+            data = ET.fromstring(r.text)
+            return int(data.attrib["numberMatched"])
+        except Exception as ex:
+            raise Exception("Failed to parse the xml data.{}".format(r.text))
     
     def list_featuretypes(self,workspace,storename=None):
         r = self.get(self.featuretypes_url(workspace,storename),headers=self.accept_header("json"))

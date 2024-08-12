@@ -11,7 +11,7 @@ class ListWorkspaces(Task):
         super().__init__(post_actions_factory = post_actions_factory)
 
     def _format_result(self):
-        return "workspaces : {}\r\n{}".format(len(self.result),json.dumps(self.result) if self.result else "")
+        return " , ".format(str(w) for w in self.result) if self.result else ""
 
     def _exec(self,geoserver):
         return geoserver.list_workspaces()

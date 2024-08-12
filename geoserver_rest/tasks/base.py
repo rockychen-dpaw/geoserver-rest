@@ -124,7 +124,7 @@ class Task(object):
 
     @property
     def is_succeed(self):
-        return True if (self.starttime is not None and self.endtime is not None and  self.result) else False
+        return True if (self.starttime is not None and self.endtime is not None and  self.result is not None) else False
 
     @property
     def is_failed(self):

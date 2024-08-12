@@ -229,7 +229,7 @@ class GWCMixin(object):
         return True
             
     def get_gwclayer(self,workspace,layername):
-        r = self.get(self.gwclayer_url(workspace,layername) , headers=self.accept_header("json"))
+        r = self.get(self.gwclayer_url(workspace,layername) , headers=self.accept_header("json"),raise_exception=False)
         if r.status_code == 404:
             return None
         elif r.status_code >= 300:

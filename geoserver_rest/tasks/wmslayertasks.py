@@ -1,58 +1,78 @@
+import json
+
 from .base import Task
 from .. import timezone
 
 class ListWMSLayers(Task):
     """
-    Return [(workspace,[(wmsstore,[wmslayer])])]
+    Return [wmslayer]
     """
     arguments = ("workspace","wmsstore")
     category = "List WMSLayers"
-    workspace = None
-    wmsstore = None
-    def __init__(self,workspace=None,wmsstore=None,post_actions_factory = None):
+    def __init__(self,workspace,wmsstore,post_actions_factory = None):
         super().__init__(post_actions_factory = post_actions_factory) 
-        if workspace:
-            self.workspace = workspace
-            if wmsstore:
-                self.wmsstore = wmsstore
+        self.workspace = workspace
+        self.wmsstore = wmsstore
 
     def _format_result(self):
-        return "\r\n".join("Workspace : {}\r\n{}".format(
-            w,
-            "\r\n".join("    WMSStore : {} , WMSLayers : {}".format(s,len(wmslayers)) for s,wmslayers in storedata)
-        ) for w,storedata in self.result if storedata)
+        return "WMSLayers : {}".format(len(self.result) if self.result else 0) 
 
     def _warnings(self):
-        for workspace,storedatas in self.result:
-            for store,layers in storedatas:
-                if not layers:
-                    yield "The wmsstore({}) is empty.".format(store)
-    def _exec(self,geoserver):
-        if self.workspace:
-            if self.wmsstore:
-                return [(self.workspace,[(self.wmsstore,geoserver.list_wmslayers(self.workspace,self.wmsstore))])]
-            else:
-                result = [(self.workspace,[])]
-                for store in geoserver.list_wmsstores(self.workspace):
-                    result[0][1].append((store,geoserver.list_featuretypes(self.workspace,store)))
-                return result
-        else:
-            result = []
-            for workspace in geoserver.list_workspaces():
-                result.append((workspace,[]))
-                for store in geoserver.list_wmsstores(workspace):
-                    result[-1][1].append((store,geoserver.list_featuretypes(workspace,store)))
+        if not self.result:
+            yield "The WMSstore({}:{}) is empty.".format(self.workspace,self.wmsstore)
 
-            return result
+    def _exec(self,geoserver):
+        return geoserver.list_wmslayers(self.workspace,self.wmsstore)
         
+class GetWMSLayerDetail(Task):
+    """
+    Return a dict of wms layer detail
+    """
+    arguments = ("workspace","wmsstore","layername")
+    category = "Get layername Detail "
+
+    def __init__(self,workspace,wmsstore,layername,post_actions_factory = None):
+        super().__init__(post_actions_factory = post_actions_factory) 
+        self.workspace = workspace
+        self.wmsstore = wmsstore
+        self.layername = layername
+
+    def _format_result(self):
+        return json.dumps(self.result,indent=4) if self.result else "{}"
+
+    def _exec(self,geoserver):
+        result = {}
+        #get the layer detail
+        detail = geoserver.get_wmslayer(self.workspace,self.layername)
+        for k in ["nativeName","title","abstract","srs","nativeBoundingBox","latLonBoundingBox","enabled"]:
+            if not detail.get(k):
+                continue
+            result[k] = detail[k]
+        #get the gwc details
+        detail = geoserver.get_gwclayer(self.workspace,self.layername)
+        if detail:
+            result["gwc"] = {}
+            for k in ["expireClients","expireCache","gridSubsets","enabled"]:
+                result["gwc"][k] = detail[k]
+        
+        return result
+
 def createtasks_ListWMSLayers(listWMSstoresTask):
     """
-    a generator to return featuretypes tasks
+    a generator to return layernames tasks
     """
     if not listWMSstoresTask.result:
         return
-    for w,stores in listWMSstoresTask.result:
-        for store in stores:
-            yield ListWMSLayers(w,store,post_actions_factory=listWMSstoresTask.post_actions_factory)
+    for store in listWMSstoresTask.result:
+        yield ListWMSLayers(listWMSstoresTask.workspace,store,post_actions_factory=listWMSstoresTask.post_actions_factory)
 
+
+def createtasks_GetWMSLayerDetail(listWMSLayersTask):
+    """
+    a generator to return WMSLayer detail tasks
+    """
+    if not listWMSLayersTask.result:
+        return
+    for layername in listWMSLayersTask.result:
+        yield GetWMSLayerDetail(listWMSLayersTask.workspace,listWMSLayersTask.wmsstore,layername,post_actions_factory=listWMSLayersTask.post_actions_factory)
 

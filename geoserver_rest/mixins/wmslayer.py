@@ -68,17 +68,17 @@ class WMSLayerMixin(object):
         else:
             return "{0}/rest/workspaces/{1}/wmslayers".format(self.geoserver_url,workspace)
     
-    def wmslayer_url(self,workspace,layername,storename=""):
+    def wmslayer_url(self,workspace,layername,storename="",format="json"):
         if storename:
-            return "{0}/rest/workspaces/{1}/wmsstores/{2}/wmslayers/{3}".format(self.geoserver_url,workspace,storename,layername)
+            return "{0}/rest/workspaces/{1}/wmsstores/{2}/wmslayers/{3}.{4}".format(self.geoserver_url,workspace,storename,layername,format)
         else:
-            return "{0}/rest/workspaces/{1}/wmslayers/{2}".format(self.geoserver_url,workspace,layername)
+            return "{0}/rest/workspaces/{1}/wmslayers/{2}.{3}".format(self.geoserver_url,workspace,layername,format)
     
     def has_wmslayer(self,workspace,layername,storename=None):
-        return self.has(self.wmslayer_url(workspace,layername,storename=storename))
+        return self.has(self.wmslayer_url(workspace,layername,storename=storename,format="json"),headers=GeoserverUtils.accept_header("json"))
     
     def get_wmslayer(self,workspace,layername,storename=None):
-        r = self.get(self.wmslayer_url(workspace,layername,storename=storename),headers=self.accept_header("json"))
+        r = self.get(self.wmslayer_url(workspace,layername,storename=storename,format="json"),headers=self.accept_header("json"))
         if r.status_code == 404:
             return None
         r.raise_for_status()
@@ -105,7 +105,7 @@ class WMSLayerMixin(object):
                 self.delete_gwclayer(workspace,layername)
             return False
     
-        r = self.delete("{}.xml?recurse=true".format(self.wmslayer_url(workspace,layername)))
+        r = self.delete(self.wmslayer_url(workspace,layername,format="xml"))
         if r.status_code >= 300:
             raise Exception("Failed to delete the wmslayer({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
     

@@ -1,10 +1,14 @@
 import os
 import threading
+import logging
 
 from .taskrunner import TaskRunner
 from .geoserver import Geoserver
 from .tasks import *
 from .csv import CSVWriter
+from . import settings
+
+logger = logging.getLogger(__name__)
 
 actions_map = {
 
@@ -43,7 +47,6 @@ class GeoserverHealthCheck(object):
             return [
                 self.create_tasks_from_previoustask_factory(createtasks_ListDatastores),
                 self.create_tasks_from_previoustask_factory(createtasks_ListWMSstores),
-                self.create_tasks_from_previoustask_factory(createtasks_ListWMTSLayers),
                 self._reportwriteaction,
                 self._warningwriteaction
             ]
@@ -55,7 +58,8 @@ class GeoserverHealthCheck(object):
             ]
         elif task_category == ListFeatureTypes.category:
             return [
-                self.create_tasks_from_previoustask_factory(createtasks_GetFeatureTypeStyles),
+                self.create_tasks_from_previoustask_factory(createtasks_GetFeatureCount),
+                self.create_tasks_from_previoustask_factory(createtasks_GetFeatureTypeDetail),
                 self._reportwriteaction,
                 self._warningwriteaction
             ]
@@ -65,22 +69,22 @@ class GeoserverHealthCheck(object):
                 self._reportwriteaction,
                 self._warningwriteaction,
             ]
-        elif task_category == ListWMTSLayers.category:
-            return [
-                self._reportwriteaction,
-                self._warningwriteaction,
-            ]
-        elif task_category == GetFeatureTypeStyles.category:
-            return [
-                self._reportwriteaction,
-                self._warningwriteaction,
-            ]
         elif task_category == ListWMSLayers.category:
             return [
+                self.create_tasks_from_previoustask_factory(createtasks_GetWMSLayerDetail),
                 self._reportwriteaction,
                 self._warningwriteaction,
             ]
-
+        elif task_category == GetFeatureTypeDetail.category:
+            return [
+                self._reportwriteaction,
+                self._warningwriteaction,
+            ]
+        elif task_category == GetWMSLayerDetail.category:
+            return [
+                self._reportwriteaction,
+                self._warningwriteaction,
+            ]
 
         return None
         
