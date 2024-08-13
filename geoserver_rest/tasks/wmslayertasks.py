@@ -29,7 +29,7 @@ class GetWMSLayerDetail(Task):
     Return a dict of wms layer detail
     """
     arguments = ("workspace","wmsstore","layername")
-    category = "Get layername Detail "
+    category = "Get WMSLayer Detail "
 
     def __init__(self,workspace,wmsstore,layername,post_actions_factory = None):
         super().__init__(post_actions_factory = post_actions_factory) 
@@ -57,22 +57,30 @@ class GetWMSLayerDetail(Task):
         
         return result
 
-def createtasks_ListWMSLayers(listWMSstoresTask):
+def createtasks_ListWMSLayers(listWMSstoresTask,limit = 0):
     """
     a generator to return layernames tasks
     """
     if not listWMSstoresTask.result:
         return
+    row = 0
     for store in listWMSstoresTask.result:
+        row += 1
+        if limit > 0 and row > limit:
+            break
         yield ListWMSLayers(listWMSstoresTask.workspace,store,post_actions_factory=listWMSstoresTask.post_actions_factory)
 
 
-def createtasks_GetWMSLayerDetail(listWMSLayersTask):
+def createtasks_GetWMSLayerDetail(listWMSLayersTask,limit = 0):
     """
     a generator to return WMSLayer detail tasks
     """
     if not listWMSLayersTask.result:
         return
+    row = 0
     for layername in listWMSLayersTask.result:
+        row += 1
+        if limit > 0 and row > limit:
+            break
         yield GetWMSLayerDetail(listWMSLayersTask.workspace,listWMSLayersTask.wmsstore,layername,post_actions_factory=listWMSLayersTask.post_actions_factory)
 

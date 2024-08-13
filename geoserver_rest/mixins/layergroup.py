@@ -1,4 +1,5 @@
 import logging
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +38,8 @@ class LayergroupMixin(object):
         return self.has(self.layergroup_url(workspace,groupname),headers=accept_header("json"))
     
     def list_layergroups(self,workspace):
-        r = self.get(self.layergroups_url(workspace),headers=accept_header("json"))
-        if r.status_code >= 300:
-            raise Exception("Failed to list the layergroups in workspace({}:{}). code = {},message = {}".format(workspace,r.status_code, r.content))
-    
-        return [str(g["name"]) for g in (r.json().get("layerGroups") or {}).get("layerGroup") or [] ]
+        res = self.get(self.layergroups_url(workspace),headers=accept_header("json"))
+        return [str(g["name"]) for g in (res.json().get("layerGroups") or {}).get("layerGroup") or [] ]
     
     
     def delete_layergroup(self,workspace,groupname):
@@ -52,10 +50,7 @@ class LayergroupMixin(object):
             logger.debug("The layergroup({}:{}) doesn't exist".format(workspace,groupname))
             return False
     
-        r = self.delete(self.layergroup_url(workspace,groupname))
-        if r.status_code >= 300:
-            raise Exception("Failed to delete layergroup({}:{}). code = {} , message = {}".format(workspace,groupname,r.status_code, r.content))
-    
+        res = self.delete(self.layergroup_url(workspace,groupname))
         logger.debug("Succeed to delete the layergroup({}:{})".format(workspace,groupname))
         return True
     
@@ -80,31 +75,24 @@ class LayergroupMixin(object):
                 layer["name"]) for layer in parameters.get("layers",{})
         ))
         if self.has_layergroup(workspace,groupname):
-            r = self.put(self.layergroup_url(workspace,groupname), headers=self.contenttype_header("xml"), data=group_data)
             create = False
         else:
-            #layer doesn't exist
-            r = self.post(self.layergroups_url(workspace), headers=self.contenttype_header("xml"), data=group_data)
             create = True
-    
-        if r.status_code >= 300:
-            if r.status_code >= 400 and create == False:
+        try:
+            if create:
+                #layer doesn't exist
+                res = self.post(self.layergroups_url(workspace), headers=self.contenttype_header("xml"), data=group_data)
+                logger.debug("Succeed to create the layergroup({}:{}). ".format(workspace,groupname))
+                return True
+            else:
+                res = self.put(self.layergroup_url(workspace,groupname), headers=self.contenttype_header("xml"), data=group_data)
+                logger.debug("Succeed to update the layergroup({}:{}). ".format(workspace,groupname))
+                return False
+        except requests.RequestException as ex:
+            if create == False:
                 #update group({0}) failed, try to delete and readd it"
                 self.delete_layergroup(workspace,groupname)
                 return self.update_layergroup(workspace,groupname,parameters)
             else:
-                raise Exception("Failed to {} the layergroup({}:{}). code = {} , message = {}".format(
-                    "create" if create else "update",
-                    workspace,
-                    groupname,
-                    r.status_code, 
-                    r.content
-                ))
-    
-        if create:
-            logger.debug("Succeed to create the layergroup({}:{}). ".format(workspace,groupname))
-            return True
-        else:
-            logger.debug("Succeed to update the layergroup({}:{}). ".format(workspace,groupname))
-            return False
+                raise ex
     

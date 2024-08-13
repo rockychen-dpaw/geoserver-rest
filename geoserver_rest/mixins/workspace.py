@@ -1,4 +1,7 @@
 import logging
+import requests
+
+from ..exceptions import *
 
 logger = logging.getLogger(__name__)
 
@@ -21,38 +24,33 @@ class WorkspaceMixin(object):
         """
         Return unordered workspace list.
         """
-        r = self.get(self.workspaces_url(),headers=self.accept_header("json"))
-        if r.status_code >= 300:
-            raise Exception("Failed to list the workspaces. code = {},message = {}".format(r.status_code, r.content))
+        res = self.get(self.workspaces_url(),headers=self.accept_header("json"))
     
-        return [str(w["name"]) for w in (r.json().get("workspaces") or {}).get("workspace") or [] ]
+        return [str(w["name"]) for w in (res.json().get("workspaces") or {}).get("workspace") or [] ]
     
     def create_workspace(self,workspace):
         """
         Return true if created; otherwise return False if already exist
         """
-        data = WORKSPACE_TEMPLATE.format(workspace)
-        r = self.post(self.workspaces_url(),data=data,headers=self.contenttype_header("xml"))
-        if r.status_code >= 300:
+        try:
+            data = WORKSPACE_TEMPLATE.format(workspace)
+            res = self.post(self.workspaces_url(),data=data,headers=self.contenttype_header("xml"))
+            logger.debug("Succeed to create the workspace({})".format(workspace))
+            return True
+        except requests.RequestException as ex:
             if self.has_workspace(workspace):
                 return False
             else:
-                raise Exception("Failed to create the workspace({}). code = {},message = {}".format(workspace,r.status_code, r.content))
-    
-        logger.debug("Succeed to create the workspace({})".format(workspace))
-        return True
+                raise ex
     
     def delete_workspace(self,workspace,recurse=False):
         """
         Return True if deleted; otherwise return False if doesn't exist
         """
-        r = self.delete("{}?recurse={}".format(self.workspace_url(workspace),"true" if recurse else "false"))
-        if r.status_code == 404:
-            logger.debug("The workspace({}) doesn't exist".format(workspace))
+        try:
+            res = self.delete("{}?recurse={}".format(self.workspace_url(workspace),"true" if recurse else "false"))
+            logger.debug("Succeed to delete the workspace({})".format(workspace))
+            return True
+        except ResourceNotFound as ex:
             return False
-        if r.status_code >= 300:
-            raise Exception("Failed to delete the workspace({}). code = {},message = {}".format(workspace,r.status_code, r.content))
-    
-        logger.debug("Succeed to delete the workspace({})".format(workspace))
-        return True
     

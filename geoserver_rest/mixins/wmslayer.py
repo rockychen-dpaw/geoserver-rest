@@ -1,6 +1,8 @@
 import logging
 import os
 
+from ..exceptions import *
+
 logger = logging.getLogger(__name__)
 
 LAYER_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -75,26 +77,26 @@ class WMSLayerMixin(object):
             return "{0}/rest/workspaces/{1}/wmslayers/{2}.{3}".format(self.geoserver_url,workspace,layername,format)
     
     def has_wmslayer(self,workspace,layername,storename=None):
-        return self.has(self.wmslayer_url(workspace,layername,storename=storename,format="json"),headers=GeoserverUtils.accept_header("json"))
+        return self.has(self.wmslayer_url(workspace,layername,storename=storename,format="json"),headers=self.accept_header("json"))
     
     def get_wmslayer(self,workspace,layername,storename=None):
-        r = self.get(self.wmslayer_url(workspace,layername,storename=storename,format="json"),headers=self.accept_header("json"))
-        if r.status_code == 404:
+        """
+        Return a json object if exists; otherwise return None
+        """
+        try:
+            res = self.get(self.wmslayer_url(workspace,layername,storename=storename,format="json"),headers=self.accept_header("json"))
+            return res.json()["wmsLayer"]
+        except ResourceNotFound as ex:
             return None
-        r.raise_for_status()
-        return r.json()["wmsLayer"]
     
     def list_wmslayers(self,workspace,storename):
         """
         Return the list of layers in the store if storename is not null;otherwise return all layers in the workspace
         """
-        r = self.get(self.wmslayers_url(workspace,storename),headers=self.accept_header("json"))
-        if r.status_code >= 300:
-            raise Exception("Failed to list the wmslayers in wmsstore({}:{}). code = {},message = {}".format(workspace,storename,r.status_code, r.content))
+        res = self.get(self.wmslayers_url(workspace,storename),headers=self.accept_header("json"))
+        return [str(l["name"]) for l in (res.json().get("wmsLayers") or {}).get("wmsLayer") or [] ]
     
-        return [str(l["name"]) for l in (r.json().get("wmsLayers") or {}).get("wmsLayer") or [] ]
-    
-    def delete_wmslayer(self,workspace,layername):
+    def delete_wmslayer(self,workspace,layername,recurse=False):
         """
         Return True if deleted;otherwise return False if doesn't exist before
         """
@@ -105,10 +107,7 @@ class WMSLayerMixin(object):
                 self.delete_gwclayer(workspace,layername)
             return False
     
-        r = self.delete(self.wmslayer_url(workspace,layername,format="xml"))
-        if r.status_code >= 300:
-            raise Exception("Failed to delete the wmslayer({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
-    
+        res = self.delete("{}?recurse={}".format(self.wmslayer_url(workspace,layername,format="xml"),"true" if recurse else "false"),headers=self.accept_header("xml"))
         logger.debug("Succeed to delete the wmslayer({}:{}).".format(workspace,layername))
         return True
     
@@ -161,15 +160,11 @@ class WMSLayerMixin(object):
             latLonBoundingBox_xml
     )
         if create:
-            r = self.post(self.wmslayers_url(workspace,storename=storename), headers=self.contenttype_header("xml"), data=layer_data)
-            if r.status_code >= 300:
-                raise Exception("Failed to create the wmslayer({}:{}:{}). code = {} , message = {}".format(workspace,storename,layername,r.status_code, r.content))
+            res = self.post(self.wmslayers_url(workspace,storename=storename), headers=self.contenttype_header("xml"), data=layer_data)
             logger.debug("Succeed to create the wmslayer({}:{}:{}). ".format(workspace,storename,layername))
             return True
         else:
-            r = self.put(self.wmslayer_url(workspace,layername), headers=self.contenttype_header("xml"), data=layer_data)
-            if r.status_code >= 300:
-                raise Exception("Failed to update the wmslayer({}:{}:{}). code = {} , message = {}".format(workspace,storename,layername,r.status_code, r.content))
+            res = self.put(self.wmslayer_url(workspace,layername), headers=self.contenttype_header("xml"), data=layer_data)
             logger.debug("Succeed to update the wmslayer({}:{}:{}). ".format(workspace,storename,layername))
             return False
     

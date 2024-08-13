@@ -94,11 +94,9 @@ class StyleMixin(object):
         return "{0}/rest/workspaces/{1}/styles/{2}".format(self.geoserver_url,workspace,stylename)
 
     def list_styles(self,workspace):
-        r = self.get(self.styles_url(workspace),headers=self.accept_header("json"))
-        if r.status_code >= 300:
-            raise Exception("Failed to list the workspaces. code = {},message = {}".format(r.status_code, r.content))
+        res = self.get(self.styles_url(workspace),headers=self.accept_header("json"))
     
-        return [str(s["name"]) for s in (r.json().get("styles") or {}).get("style") or [] ]
+        return [str(s["name"]) for s in (res.json().get("styles") or {}).get("style") or [] ]
     
     def has_style(self,workspace,stylename):
         return self.has(self.style_url(workspace,stylename),headers=self.accept_header("json"))
@@ -110,10 +108,7 @@ class StyleMixin(object):
         if not self.has_style(workspace,stylename):
             return False
     
-        r = self.delete("{}?recurse={}&purge=true".format(self.style_url(workspace,stylename),"true" if recurse else "false"))
-        if r.status_code >= 300:
-            raise Exception("Failed to delete the style({}:{}). code = {} , message = {}".format(workspace,stylename,r.status_code, r.content))
-    
+        res = self.delete("{}?recurse={}&purge=true".format(self.style_url(workspace,stylename),"true" if recurse else "false"))
         logger.debug("Succeed to delete the style({}:{})".format(workspace,stylename))
         return True
     
@@ -121,11 +116,7 @@ class StyleMixin(object):
         if not self.has_style(workspace,stylename):
             headers = {"content-type": "application/vnd.ogc.sld+xml"}
             placeholder_data = GENERIC_STYLE_TEMPLATE.format(stylename)
-            r = self.post(self.styles_url(workspace),data=placeholder_data, headers=headers)
-            if r.status_code >= 300:
-                logger.error("Failed to create the style({}:{}). code = {} , message = {}".format(workspace,stylename,r.status_code, r.content))
-                raise Exception("Failed to create the style({}:{}). code = {} , message = {}".format(workspace,stylename,r.status_code, r.content))
-    
+            res = self.post(self.styles_url(workspace),data=placeholder_data, headers=headers)
     
         sld_content_type = "application/vnd.ogc.sld+xml"
         if sldversion == "1.1.0" or sldversion == "1.1":
@@ -133,11 +124,6 @@ class StyleMixin(object):
     
         headers = {"content-type": sld_content_type}
     
-        r = self.put(self.style_url(workspace,stylename),data=slddata, headers=headers)
-    
-        if r.status_code >= 300:
-            logger.error("Failed to update the style({}:{}). code = {} , message = {}".format(workspace,stylename,r.status_code, r.content))
-            raise Exception("Failed to update the style({}:{}). code = {} , message = {}".format(workspace,stylename,r.status_code, r.content))
-    
+        res = self.put(self.style_url(workspace,stylename),data=slddata, headers=headers)
         logger.debug("Succeed to update the style({}:{})".format(workspace,stylename))
     

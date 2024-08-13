@@ -75,7 +75,7 @@ class WMSLayerTest(BaseTest):
 
 
             print("Try to delete the wmslayer({})".format(test_layername))
-            self.assertTrue(self.geoserver.delete_wmslayer(test_workspace,test_layername),"The wmslayer({}) should exist before".format(test_layername))
+            self.assertTrue(self.geoserver.delete_wmslayer(test_workspace,test_layername,recurse=True),"The wmslayer({}) should exist before".format(test_layername))
             self.assertFalse(self.geoserver.delete_wmslayer(test_workspace,test_layername),"The wmslayer({}) should have been deleted before".format(test_layername))
             self.assertFalse(self.geoserver.has_wmslayer(test_workspace,test_layername,storename=test_storename),"The wmslayer({}) should have been deleted".format(test_layername))
             self.assertEqual(len(self.geoserver.list_wmslayers(test_workspace,test_storename)),0,"The wmsstore({}) should have no layer".format(test_storename))

@@ -3,12 +3,11 @@ import collections
 import os
 import string
 import requests
+
 from .mixins import *
+from .exceptions import *
 
 logger = logging.getLogger(__name__)
-
-class GeoserverException(Exception):
-    pass
 
 class GeoserverUtils(object):
     @staticmethod
@@ -33,6 +32,12 @@ class GeoserverUtils(object):
             return {"content-type": "application/xml"}
         elif f == "json":
             return {"content-type": "application/json"}
+        elif f == "jpeg":
+            return {"content-type": "image/jpeg"}
+        elif f == "png":
+            return {"content-type": "image/png"}
+        elif "/" in f:
+            return {"content-type": f}
         else:
             raise Exception("Format({}) Not Support".format(f))
     
@@ -48,10 +53,21 @@ class GeoserverUtils(object):
             return {"Accept": "image/jpeg"}
         elif f == "png":
             return {"Accept": "image/png"}
+        elif "/" in f:
+            return {"Accept": f}
         else:
             raise Exception("Format({}) Not Support".format(f))
 
-class Geoserver(AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMixin,LayergroupMixin,ReloadMixin,SecurityMixin,StyleMixin,WMSLayerMixin,WMSStoreMixin,WorkspaceMixin,UsergroupMixin,GeoserverUtils):
+    def _handle_response_error(self,res):
+        if res.status_code >= 300 and res.status_code < 400:
+            raise UnauthorizedException(response=res)
+        elif res.status_code == 404:
+            raise ResourceNotFound(response=res)
+        elif res.status_code >= 400:
+            res.raise_for_status()
+
+
+class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMixin,LayergroupMixin,ReloadMixin,SecurityMixin,StyleMixin,WMSLayerMixin,WMSStoreMixin,WorkspaceMixin,UsergroupMixin,GeoserverUtils):
     def __init__(self,geoserver_url,username,password,headers=None):
         assert geoserver_url,"Geoserver URL is not configured"
         assert username,"Geoserver user is not configured"
@@ -61,46 +77,41 @@ class Geoserver(AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMixin,LayergroupMi
         self.password = password
         self.headers = headers
 
-    def get(self,url,headers=GeoserverUtils.accept_header("json"),raise_exception=True,timeout=30):
+
+    def get(self,url,headers=GeoserverUtils.accept_header("json"),timeout=30,error_handler=None):
         if self.headers:
             headers = collections.ChainMap(headers,self.headers)
-        r = requests.get(url , headers=headers, auth=(self.username,self.password),timeout=timeout)
-        if raise_exception:
-            if r.status_code >= 500 or (r.status_code >= 300 and r.status_code < 400):
-                logger.error("Failed to access the url({}). code = {} , message = {}".format(url,r.status_code, r.content))
-                r.raise_for_status()
-        return r
+        res = requests.get(url , headers=headers, auth=(self.username,self.password),timeout=timeout)
+        (error_handler or self._handle_response_error)(res)
+        return res
 
-    def has(self,url,headers=GeoserverUtils.accept_header("json"),timeout=30):
-        r = self.get(url , headers=headers,timeout=timeout)
-        return True if r.status_code == 200 else False
+    def has(self,url,headers=GeoserverUtils.accept_header("json"),timeout=30,error_handler=None):
+        try:
+            r = self.get(url , headers=headers,timeout=timeout,error_handler=error_handler)
+            return True if r.status_code == 200 else False
+        except ResourceNotFound as ex:
+            return False
 
-    def post(self,url,data,headers=GeoserverUtils.contenttype_header("xml"),timeout=30):
+    def post(self,url,data,headers=GeoserverUtils.contenttype_header("xml"),timeout=30,error_handler=None):
         if self.headers:
             headers = collections.ChainMap(headers,self.headers)
-        r = requests.post(url , data=data , headers=headers, auth=(self.username,self.password),timeout=timeout)
-        if r.status_code >= 500 or (r.status_code >= 300 and r.status_code < 400):
-            logger.error("Failed to post the url({}). code = {} , message = {}".format(url,r.status_code, r.content))
-            r.raise_for_status()
-        return r
+        res = requests.post(url , data=data , headers=headers, auth=(self.username,self.password),timeout=timeout)
+        (error_handler or self._handle_response_error)(res)
+        return res
 
-    def put(self,url,data,headers=GeoserverUtils.contenttype_header("xml"),timeout=30):
+    def put(self,url,data,headers=GeoserverUtils.contenttype_header("xml"),timeout=30,error_handler=None):
         if self.headers:
             headers = collections.ChainMap(headers,self.headers)
-        r = requests.put(url , data=data , headers=headers, auth=(self.username,self.password),timeout=timeout)
-        if r.status_code >= 500 or (r.status_code >= 300 and r.status_code < 400):
-            logger.error("Failed to put the url({}). code = {} , message = {}".format(url,r.status_code, r.content))
-            r.raise_for_status()
-        return r
+        res = requests.put(url , data=data , headers=headers, auth=(self.username,self.password),timeout=timeout)
+        (error_handler or self._handle_response_error)(res)
+        return res
 
-    def delete(self,url,headers=None,timeout=30):
+    def delete(self,url,headers=None,timeout=30,error_handler=None):
         if self.headers:
             headers = collections.ChainMap(headers,self.headers)
-        r = requests.delete(url , auth=(self.username,self.password),headers=headers,timeout=timeout)
-        if r.status_code >= 500 or (r.status_code >= 300 and r.status_code < 400):
-            logger.error("Failed to delete the url({}). code = {} , message = {}".format(url,r.status_code, r.content))
-            r.raise_for_status()
-        return r
+        res = requests.delete(url , auth=(self.username,self.password),headers=headers,timeout=timeout)
+        (error_handler or self._handle_response_error)(res)
+        return res
 
     def all_layers(self):
         """

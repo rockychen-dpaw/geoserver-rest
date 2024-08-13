@@ -35,9 +35,11 @@ class GeoserverHealthCheck(object):
 
         return _func if self.dop > 1 else taskaction
 
-    def create_tasks_from_previoustask_factory(self,f_createtasks):
+    def create_tasks_from_previoustask_factory(self,f_createtasks,limit=None):
+        if limit is None:
+            limit = 1 if settings.DEBUG else 0
         def _func(previoustask):
-            for t in f_createtasks(previoustask):
+            for t in f_createtasks(previoustask,limit = limit):
                self.taskrunner.add_task(t)
 
         return _func
@@ -45,8 +47,8 @@ class GeoserverHealthCheck(object):
     def post_actions_factory(self,task_category):
         if task_category == ListWorkspaces.category:
             return [
-                self.create_tasks_from_previoustask_factory(createtasks_ListDatastores),
-                self.create_tasks_from_previoustask_factory(createtasks_ListWMSstores),
+                self.create_tasks_from_previoustask_factory(createtasks_ListDatastores,0),
+                self.create_tasks_from_previoustask_factory(createtasks_ListWMSstores,0),
                 self._reportwriteaction,
                 self._warningwriteaction
             ]
@@ -65,7 +67,7 @@ class GeoserverHealthCheck(object):
             ]
         elif task_category == ListWMSstores.category:
             return [
-                self.create_tasks_from_previoustask_factory(createtasks_ListWMSLayers),
+                #self.create_tasks_from_previoustask_factory(createtasks_ListWMSLayers),
                 self._reportwriteaction,
                 self._warningwriteaction,
             ]
@@ -77,10 +79,21 @@ class GeoserverHealthCheck(object):
             ]
         elif task_category == GetFeatureTypeDetail.category:
             return [
+                self.create_tasks_from_previoustask_factory(createtasks_TestFeatureTypeWMSService),
                 self._reportwriteaction,
                 self._warningwriteaction,
             ]
         elif task_category == GetWMSLayerDetail.category:
+            return [
+                self._reportwriteaction,
+                self._warningwriteaction,
+            ]
+        elif task_category == GetFeatureCount.category:
+            return [
+                self._reportwriteaction,
+                self._warningwriteaction,
+            ]
+        elif task_category == TestFeatureTypeWMSService.category:
             return [
                 self._reportwriteaction,
                 self._warningwriteaction,

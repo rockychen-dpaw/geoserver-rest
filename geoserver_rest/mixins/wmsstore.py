@@ -33,11 +33,9 @@ class WMSStoreMixin(object):
         return self.has(self.wmsstore_url(workspace,storename),headers=self.accept_header("json"))
     
     def list_wmsstores(self,workspace):
-        r = self.get(self.wmsstores_url(workspace),headers=self.accept_header("json"))
-        if r.status_code >= 300:
-            raise Exception("Failed to list the wmsstores in workspace({}). code = {},message = {}".format(workspace,r.status_code, r.content))
+        res = self.get(self.wmsstores_url(workspace),headers=self.accept_header("json"))
     
-        return [str(s["name"]) for s in (r.json().get("wmsStores") or {}).get("wmsStore") or [] ]
+        return [str(s["name"]) for s in (res.json().get("wmsStores") or {}).get("wmsStore") or [] ]
     
     def update_wmsstore(self,workspace,storename,parameters,create=None):
         """
@@ -58,15 +56,11 @@ class WMSStoreMixin(object):
             create = False if self.has_wmsstore(workspace,storename) else True
 
         if create:
-            r = self.post(self.wmsstores_url(workspace), headers=self.contenttype_header("xml"), data=store_data)
-            if r.status_code >= 300:
-                raise Exception("Failed to create the wmsstore({}:{}). code = {} , message = {}".format(workspace,storename,r.status_code, r.content))
+            res = self.post(self.wmsstores_url(workspace), headers=self.contenttype_header("xml"), data=store_data)
             logger.debug("Succeed to create the wmsstore({}:{}). ".format(workspace,storename))
             return True
         else:
-            r = self.put(self.wmsstore_url(workspace,storename), headers=self.contenttype_header("xml"), data=store_data)
-            if r.status_code >= 300:
-                raise Exception("Failed to update the wmsstore({}:{}). code = {} , message = {}".format(workspace,storename,r.status_code, r.content))
+            res = self.put(self.wmsstore_url(workspace,storename), headers=self.contenttype_header("xml"), data=store_data)
             logger.debug("Succeed to update the wmsstore({}:{}). ".format(workspace,storename))
             return False
 
@@ -78,9 +72,7 @@ class WMSStoreMixin(object):
             logger.debug("The wmsstore({}:{}) doesn't exist".format(workspace,storename))
             return False
     
-        r = self.delete("{}?recurse={}".format(self.wmsstore_url(workspace,storename),"true" if recurse else "false"))
-        if r.status_code >= 300:
-            raise Exception("Failed to delete wmsstore({}:{}). code = {} , message = {}".format(workspace,storename,r.status_code, r.content))
+        res = self.delete("{}?recurse={}".format(self.wmsstore_url(workspace,storename),"true" if recurse else "false"))
     
         logger.debug("Succeed to delete the wmsstore({}:{})".format(workspace,storename))
         return True

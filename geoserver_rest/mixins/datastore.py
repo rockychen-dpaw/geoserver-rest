@@ -98,11 +98,9 @@ class DatastoreMixin(object):
         """
         Return the list of datastores
         """
-        r = self.get(self.datastores_url(workspace), headers=self.accept_header("json"))
-        if r.status_code >= 300:
-            raise Exception("Failed to list the datastores in workspace({}). code = {},message = {}".format(workspace,r.status_code, r.content))
+        res = self.get(self.datastores_url(workspace), headers=self.accept_header("json"))
     
-        return [str(d["name"]) for d in (r.json().get("dataStores") or {}).get("dataStore") or [] ]
+        return [str(d["name"]) for d in (res.json().get("dataStores") or {}).get("dataStore") or [] ]
 
     def update_datastore(self,workspace,storename,parameters,create=None):
         """
@@ -146,20 +144,14 @@ class DatastoreMixin(object):
             create = False if self.has_datastore(workspace,storename) else True
     
         if create:
-            r = self.post(self.datastores_url(workspace),data=store_data,headers=self.contenttype_header("xml"))
-        else:
-            r = self.put(self.datastore_url(workspace,storename),data=store_data,headers=self.contenttype_header("xml"))
-
-        if r.status_code >= 300:
-            raise Exception("Failed to {} the datastore({}:{}). code = {},message = {}".format("create" if create else "update",workspace,storename,r.status_code, r.content))
-    
-        if create:
+            res = self.post(self.datastores_url(workspace),data=store_data,headers=self.contenttype_header("xml"))
             logger.debug("Succeed to create the datastore({}:{})".format(workspace,storename))
             return True
         else:
+            res = self.put(self.datastore_url(workspace,storename),data=store_data,headers=self.contenttype_header("xml"))
             logger.debug("Succeed to update the datastore({}:{})".format(workspace,storename))
             return False
-    
+
     def delete_datastore(self,workspace,storename,recurse=False):
         """
         Return true if deleted the datastore; otherwise return False if datastore doesn't exist
@@ -168,10 +160,7 @@ class DatastoreMixin(object):
             logger.debug("The datastore({}:{}) doesn't exists".format(workspace,storename))
             return False
     
-        r = self.delete("{}?recurse={}".format(self.datastore_url(workspace,storename),"true" if recurse else "false"))
-        if r.status_code >= 300:
-            raise Exception("Failed to delete datastore({}:{}). code = {} , message = {}".format(workspace,storename,r.status_code, r.content))
-    
+        res = self.delete("{}?recurse={}".format(self.datastore_url(workspace,storename),"true" if recurse else "false"))
         logger.debug("Succeed to delete the datastore({}:{})".format(workspace,storename))
         return True
     

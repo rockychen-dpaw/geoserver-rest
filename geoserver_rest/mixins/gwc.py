@@ -5,6 +5,9 @@ import requests
 import math
 import urllib.parse
 
+from ..exceptions import *
+from .. import settings
+
 logger = logging.getLogger(__name__)
 
 LAYER_DATA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -133,7 +136,7 @@ class EPSG4326Util(GridsetUtil):
 
     def tile_bbox(self,zoom,x,y):
         """
-        Return the bounding box(left bottom, right top)
+        Return the bounding box(left bottom, right top)(minx,miny,maxx,maxy)
         """
         return (self.tile_lon(zoom,x),self.tile_lat(zoom,y + 1),self.tile_lon(zoom,x + 1),self.tile_lat(zoom,y))
 
@@ -202,48 +205,53 @@ class GWCMixin(object):
     def wmtsservice_url(self,workspace,layername):
         return "{0}/gwc/service/wmts".format(self.geoserver_url,layername)
 
+    def gridset_url(self,gridset):
+        return "{}/gwc/rest/gridsets/{}".format(self.geoserver_url,gridset)
+
+    def _handle_gwcresponse_error(self,res):
+        if res.status_code >= 400 and res.text.startswith("Unknown layer:"):
+            raise ResourceNotFound(response=res)
+        super()._handle_response_error(res)
+
+    _gridsets = {}
+    def get_gridset(self,gridset):
+        try:
+            return self._gridsets[gridset]
+        except KeyError as ex:
+            res = self.get(self.gridset_url(gridset),headers=self.accept_header("json"))
+            data = res.json()["gridSet"]
+            data["srs"] = "EPSG:{}".format(data["srs"]["number"])
+            self._gridsets[gridset] = data
+            return data
+
     def list_gwclayers(self,workspace=None):
         """
         Return the gwc layers in workspace, if workspace is not None; otherwise return all gwc layers in all workspaces.
         Return the list of layers:[(workspace,layername)]
         """
-        r = self.get(self.gwclayers_url(),headers=self.accept_header("json"))
-        r.raise_for_status()
-        
+        res = self.get(self.gwclayers_url(),headers=self.accept_header("json"))
         if workspace:
             prefix = "{}:".format(workspace)
-            return [ name.split(":",1) if ":" in name else [None,name]  for name in r.json() if name.startswith(prefix)]
+            return [ name.split(":",1) if ":" in name else [None,name]  for name in res.json() if name.startswith(prefix)]
         else:
-            return [ name.split(":",1) if ":" in name else [None,name]  for name in r.json()]
+            return [ name.split(":",1) if ":" in name else [None,name]  for name in res.json()]
         
-    
     def has_gwclayer(self,workspace,layername):
-        r = self.get(self.gwclayer_url(workspace,layername) , headers=self.accept_header("json"))
-        if r.status_code == 404:
-            return False
-        elif r.status_code >= 300:
-            if r.content.decode().startswith("Unknown layer:"):
-                return False
-            else:
-                r.raise_for_status()
-        return True
+        return self.has(self.gwclayer_url(workspace,layername) , headers=self.accept_header("json"),error_handler=self._handle_gwcresponse_error)
             
     def get_gwclayer(self,workspace,layername):
-        r = self.get(self.gwclayer_url(workspace,layername) , headers=self.accept_header("json"),raise_exception=False)
-        if r.status_code == 404:
+        """
+        Return a json object if exists; otherwise return None
+        """
+        try:
+            res = self.get(self.gwclayer_url(workspace,layername) , headers=self.accept_header("json"),error_handler=self._handle_gwcresponse_error)
+            return res.json().get("GeoServerLayer")
+        except ResourceNotFound as ex:
             return None
-        elif r.status_code >= 300:
-            if r.content.decode().startswith("Unknown layer:"):
-                return None
-            else:
-                r.raise_for_status()
-        return r.json().get("GeoServerLayer")
             
     def delete_gwclayer(self,workspace,layername):
         if self.has_gwclayer(workspace,layername):
-            r = self.delete(self.gwclayer_url(workspace,layername,f="xml"))
-            if r.status_code >= 300:
-                raise Exception("Failed to delete the gwc layer({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
+            res = self.delete(self.gwclayer_url(workspace,layername,f="xml"),error_handler=self._handle_gwcresponse_error)
             logger.debug("Succeed to delete the gwc layer({}:{})".format(workspace,layername))
         else:
             logger.debug("The gwc layer({}:{}) doesn't exist".format(workspace,layername))
@@ -284,11 +292,7 @@ class GWCMixin(object):
             parameters.get("gutter",100)
         )
     
-        r = self.put(self.gwclayer_url(workspace,layername,f="xml"), headers=self.contenttype_header("xml"), data=layer_data)
-            
-        if r.status_code >= 300:
-            raise Exception("Failed to update the gwc layer({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
-    
+        res = self.put(self.gwclayer_url(workspace,layername,f="xml"), headers=self.contenttype_header("xml"), data=layer_data,error_handler=self._handle_gwcresponse_error)
         logger.debug("Succeed to update the gwc layer({}:{}). ".format(workspace,layername))
     
     def empty_gwclayer(self,workspace,layername,gridsubsets=["gda94","mercator"],formats=["image/png","image/jpeg"]):
@@ -300,19 +304,14 @@ class GWCMixin(object):
                     gridset,
                     f
                 )
-                r = self.post(self.gwclayer_seed_url(workspace,layername),headers=collections.ChainMap(self.accept_header("json"),self.contenttype_header("xml")), data=layer_data)
-                if r.status_code >= 400:
-                    raise Exception("Failed to empty the cache of the gwc layer({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
+                res = self.post(self.gwclayer_seed_url(workspace,layername),headers=collections.ChainMap(self.accept_header("json"),self.contenttype_header("xml")), data=layer_data,error_handler=self._handle_gwcresponse_error)
     
         #check whether the task is finished or not.
         finished = False
         while(finished):
             finished = True
-            r = self.get(self.gwclayer_url(workspace,layername), headers=self.accept_header("json"))
-            if r.status_code >= 400:
-                raise Exception("Failed to empty the cache of the gwc layer({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
-    
-            tasks=r.json().get("long-array-array",[])
+            res = self.get(self.gwclayer_url(workspace,layername), headers=self.accept_header("json"),error_handler=self._handle_gwcresponse_error)
+            tasks = res.json().get("long-array-array",[])
             for t in tasks:
                 if t[3] == -1:
                     #aborted
@@ -323,12 +322,16 @@ class GWCMixin(object):
             if not finished:
                 time.sleep(1)
 
-    def get_tile(self,workspace,layername,zoom,row,column,gitsubset="gda94",format="image/jpeg",style=None,version="1.0.0"):
-        params = "layer={0}:{1}&style={7}&tilematrixset={2}&Service=WMTS&Request=GetTile&Version={8}&Format={6}&TileMatrix={2}:{3}&TileCol={5}&TileRow={4}".format(workspace,layername,gitsubset,zoom,row,column,format,style or "",version)
-        url = "{0}?{1}".format(self.wmtsservice_url(workspace,layername),urllib.parse.quote(params))
-        res = self.get(url,headers=self.accept_header("jpeg"))
-        res.raise_for_status()
+    def get_tileposition(self,x,y,zoom,gridset=settings.GWC_GRIDSET):
+        return GridsetUtil.get_instance(self.get_gridset(gridset)["srs"]).get_tile(x,y,zoom)
 
+    def get_tilebbox(self,zoom,xtile,ytile,gridset=settings.GWC_GRIDSET):
+        return GridsetUtil.get_instance(self.get_gridset(gridset)["srs"]).tile_bbox(zoom,xtile,ytile)
+
+    def get_tile(self,workspace,layername,zoom,row,column,gridset=settings.GWC_GRIDSET,format=settings.MAP_FORMAT,style=None,version=settings.WMTS_VERSION):
+        params = "layer={0}:{1}&style={7}&tilematrixset={2}&Service=WMTS&Request=GetTile&Version={8}&Format={6}&TileMatrix={2}:{3}&TileCol={5}&TileRow={4}".format(workspace,layername,gridset,zoom,row,column,format,style or "",version)
+        url = "{0}?{1}".format(self.wmtsservice_url(workspace,layername),urllib.parse.quote(params))
+        res = self.get(url,headers=self.accept_header("jpeg"),error_handler=self._handle_gwcresponse_error)
         return res
         
 

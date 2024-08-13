@@ -2,6 +2,8 @@ import logging
 import os
 import xml.etree.ElementTree as ET
 
+from ..exceptions import *
+
 logger = logging.getLogger(__name__)
 
 FEATURETYPE_VIEWSQL_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -125,27 +127,32 @@ class FeaturetypeMixin(object):
         return self.has(self.featuretype_url(workspace,layername,storename=storename))
     
     def get_featuretype(self,workspace,layername,storename=None):
-        r = self.get(self.featuretype_url(workspace,layername,storename=storename),headers=self.accept_header("json"))
-        if r.status_code == 404:
+        """
+        Return a json object if feature type exists; otherwise return None
+        """
+        try:
+            res = self.get(self.featuretype_url(workspace,layername,storename=storename),headers=self.accept_header("json"))
+            return res.json()["featureType"]
+        except ResourceNotFound as ex:
             return None
-        r.raise_for_status()
-        return r.json()["featureType"]
     
     def get_featurecount(self,workspace,layername,storename=None):
-        r = self.get(self.featurecount_url(workspace,layername),headers=self.accept_header("xml"))
-        r.raise_for_status()
+        """
+        Return the number of features 
+        """
+        res = self.get(self.featurecount_url(workspace,layername),headers=self.accept_header("xml"))
         try:
-            data = ET.fromstring(r.text)
+            data = ET.fromstring(res.text)
             return int(data.attrib["numberMatched"])
         except Exception as ex:
-            raise Exception("Failed to parse the xml data.{}".format(r.text))
+            raise Exception("Failed to parse the xml data.{}".format(res.text))
     
     def list_featuretypes(self,workspace,storename=None):
-        r = self.get(self.featuretypes_url(workspace,storename),headers=self.accept_header("json"))
-        if r.status_code >= 300:
-            raise Exception("Failed to list the featuretypes in datastore({}:{}). code = {},message = {}".format(workspace,storename,r.status_code, r.content))
-    
-        return [str(f["name"]) for f in (r.json().get("featureTypes") or {}).get("featureType") or [] ]
+        """
+        Return the list of featuretypes belonging to the workspace and storename(if not empty)
+        """
+        res = self.get(self.featuretypes_url(workspace,storename),headers=self.accept_header("json"))
+        return [str(f["name"]) for f in (res.json().get("featureTypes") or {}).get("featureType") or [] ]
     
     def delete_featuretype(self,workspace,storename,layername):
         if not self.has_featuretype(workspace,layername,storename=storename):
@@ -153,10 +160,7 @@ class FeaturetypeMixin(object):
                 self.delete_gwclayer(workspace,layername)
             return
     
-        r = self.delete("{}?recurse=true".format(self.featuretype_url(workspace,layername,storename=storename)))
-        if r.status_code >= 300:
-            raise Exception("Failed to delete the featuretype({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
-    
+        res = self.delete("{}?recurse=true".format(self.featuretype_url(workspace,layername,storename=storename)))
         logger.debug("Succeed to delete the featuretype({}:{})".format(workspace,layername))
     
     def publish_featuretype(self,workspace,storename,layername,parameters,create=None,recalculate="nativebbox,latlonbbox"):
@@ -219,46 +223,36 @@ class FeaturetypeMixin(object):
             else:
                 create = True
         if create:
-            r = self.post(self.featuretypes_url(workspace,storename),headers=self.contenttype_header("xml"),data=featuretype_data)
-            if r.status_code >= 300:
-                raise Exception("Failed to create the featuretype({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
+            res = self.post(self.featuretypes_url(workspace,storename),headers=self.contenttype_header("xml"),data=featuretype_data)
         else:
-            r = self.put("{}?recalculate={}".format(self.featuretype_url(workspace,layername,storename=storename),recalculate or ""),headers=self.contenttype_header("xml"),data=featuretype_data)
-            if r.status_code >= 300:
-                raise Exception("Failed to update the featuretype({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
+            res = self.put("{}?recalculate={}".format(self.featuretype_url(workspace,layername,storename=storename),recalculate or ""),headers=self.contenttype_header("xml"),data=featuretype_data)
     
         logger.debug("Succeed to publish the featuretype({}:{})".format(workspace,layername))
     
     def get_layer_styles(self,workspace,layername):
         """
-        Return a tuple(default style, alternate styles); return None if layer doesn't exist
+        Return a tuple(default style, alternate styles); 
+        Raise ResourceNotFound if layername doesn't exist
         """
-        r = self.get(self.layer_styles_url(workspace,layername),headers=self.accept_header("json"))
-        if r.status_code == 200:
-            r = r.json()
-            default_style = r["layer"].get("defaultStyle",{}).get("name",None)
-            if isinstance(r["layer"].get("styles",{}).get("style",[]),list):
-                return (
-                    default_style.split(":") if default_style and ":" in default_style else (None,default_style), 
-                    [d["name"].split(":") if ":" in d["name"] else [None,d["name"]] for d in r["layer"].get("styles",{}).get("style",[])])
-            else:
-                style = r["layer"].get("styles",{}).get("style")
-                return (
-                    default_style.split(":") if default_style and ":" in default_style else (None,default_style), 
-                    [style["name"].split(":") if ":" in style["name"] else [None,style["name"]]])
-        elif r.status_code == 404:
-           return None
+        res = self.get(self.layer_styles_url(workspace,layername),headers=self.accept_header("json"))
+        data = res.json()
+        default_style = data["layer"].get("defaultStyle",{}).get("name",None)
+        if isinstance(data["layer"].get("styles",{}).get("style",[]),list):
+            return (
+                default_style.split(":") if default_style and ":" in default_style else (None,default_style), 
+                [d["name"].split(":") if ":" in d["name"] else [None,d["name"]] for d in data["layer"].get("styles",{}).get("style",[])])
         else:
-            raise Exception("Failed to get styles of the featuretype({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
+            style = data["layer"].get("styles",{}).get("style")
+            return (
+                default_style.split(":") if default_style and ":" in default_style else (None,default_style), 
+                [style["name"].split(":") if ":" in style["name"] else [None,style["name"]]])
     
     def set_layer_styles(self,workspace,layername,default_style,styles):
         layer_styles_data = LAYER_STYLES_TEMPLATE.format(
             DEFAULT_STYLE_TEMPLATE.format(default_style) if default_style else "",
             os.linesep.join(STYLE_TEMPLATE.format(n) for n in styles) if styles else ""
         )
-        r = self.put(self.layer_styles_url(workspace,layername),headers=self.contenttype_header("xml"),data=layer_styles_data)
-        if r.status_code >= 300:
-            raise Exception("Failed to set styles of the featuretype({}:{}). code = {} , message = {}".format(workspace,layername,r.status_code, r.content))
+        res = self.put(self.layer_styles_url(workspace,layername),headers=self.contenttype_header("xml"),data=layer_styles_data)
     
         logger.debug("Succeed to set the styles of the layer({}:{}),default_style={}, styles={}".format(workspace,layername,default_style,styles))
     

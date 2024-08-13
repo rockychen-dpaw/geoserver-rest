@@ -9,13 +9,13 @@ class AboutMixin(object):
     VERSIONS = {}
     def get_version(self,component="geoserver"):
         if self.geoserver_url not in self.VERSIONS:
-            r = self.get(self.version_url(),headers=self.accept_header("json"))
-            if r.status_code >= 300:
-                r.raise_for_status()
+            res = self.get(self.version_url(),headers=self.accept_header("json"))
             data = {}
-            for d in r.json().get("about",{}).get("resource") or []:
+            for d in res.json().get("about",{}).get("resource") or []:
                 if isinstance(d["Version"],int):
                     data[d["@name"].lower()] = [d["Version"]]
+                elif isinstance(d["Version"],float):
+                    data[d["@name"].lower()] = [int(i) for i in str(d["Version"]).split(".")]
                 else:
                     data[d["@name"].lower()] = [int(i) for i in d["Version"].split(".")]
 

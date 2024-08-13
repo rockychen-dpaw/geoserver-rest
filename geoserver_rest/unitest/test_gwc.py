@@ -81,7 +81,7 @@ class WMSLayerTest(BaseTest):
             print("Delete the gwc cache layer for layer({}) successfully".format(test_layername))
 
             print("Try to delete the wmslayer({})".format(test_layername))
-            self.geoserver.delete_wmslayer(test_workspace,test_layername)
+            self.geoserver.delete_wmslayer(test_workspace,test_layername,recurse=True)
             self.assertFalse(self.geoserver.delete_wmslayer(test_workspace,test_layername),"The wmslayer({}) should have been deleted before".format(test_layername))
             print("Delete the wmslayer({}) successfully".format(test_layername))
 
