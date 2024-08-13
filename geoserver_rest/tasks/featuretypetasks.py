@@ -108,8 +108,13 @@ class TestFeatureTypeWMSService(Task):
     """
     Test the wms service of the feature type
     """
-    arguments = ("workspace","datastore","featuretype")
+    arguments = ("workspace","datastore","featuretype","bbox","srs","dimension","format")
     category = "Test Feature WMS Service"
+
+    bbox = None
+    srs = None
+    dimension = None
+    format = None
 
     def __init__(self,workspace,datastore,featuretype,featuredetail,post_actions_factory = None,zoom=12):
         super().__init__(post_actions_factory = post_actions_factory) 
@@ -143,13 +148,18 @@ class TestFeatureTypeWMSService(Task):
 
     def _exec(self,geoserver):
         xtile,ytile = self.get_tileposition(geoserver)
-        tile_bbox = geoserver.get_tilebbox(self.zoom,xtile,ytile,gridset = settings.GWC_GRIDSET)
+        self.bbox = geoserver.get_tilebbox(self.zoom,xtile,ytile,gridset = settings.GWC_GRIDSET)
         gridset_data = geoserver.get_gridset(settings.GWC_GRIDSET)
-        img = geoserver.get_map(self.workspace,self.featuretype,tile_bbox,
-            srs=gridset_data["srs"],
-            width=gridset_data["tileWidth"],
-            height=gridset_data["tileHeight"],
-            format=settings.MAP_FORMAT
+        self.srs = gridset_data["srs"]
+        self.format = settings.MAP_FORMAT
+        self.dimension = (gridset_data["tileWidth"],gridset_data["tileWidth"])
+
+
+        img = geoserver.get_map(self.workspace,self.featuretype,self.bbox,
+            srs=self.srs,
+            width=self.dimension[0],
+            height=self.dimension[1],
+            format=self.format
         )
         try:
             return os.path.getsize(img)
