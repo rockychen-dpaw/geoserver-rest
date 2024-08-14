@@ -142,7 +142,7 @@ class Task(object):
             self.endtime = timezone.localtime()
 
         if self.post_actions_factory:
-            post_actions = self.post_actions_factory(self.category)
+            post_actions = self.post_actions_factory(self.__class__)
             if post_actions:
                 for action in post_actions:
                     try:

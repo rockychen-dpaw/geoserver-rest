@@ -44,60 +44,67 @@ class GeoserverHealthCheck(object):
 
         return _func
 
-    def post_actions_factory(self,task_category):
-        if task_category == ListWorkspaces.category:
+    def post_actions_factory(self,taskcls):
+        if taskcls == ListWorkspaces:
             return [
                 self.create_tasks_from_previoustask_factory(createtasks_ListDatastores,0),
                 self.create_tasks_from_previoustask_factory(createtasks_ListWMSstores,0),
                 self._reportwriteaction,
                 self._warningwriteaction
             ]
-        elif task_category == ListDatastores.category:
+        elif taskcls == ListDatastores:
             return [
                 self.create_tasks_from_previoustask_factory(createtasks_ListFeatureTypes),
                 self._reportwriteaction,
                 self._warningwriteaction
             ]
-        elif task_category == ListFeatureTypes.category:
+        elif taskcls == ListFeatureTypes:
             return [
                 self.create_tasks_from_previoustask_factory(createtasks_GetFeatureCount),
                 self.create_tasks_from_previoustask_factory(createtasks_GetFeatureTypeDetail),
                 self._reportwriteaction,
                 self._warningwriteaction
             ]
-        elif task_category == ListWMSstores.category:
+        elif taskcls == ListWMSstores:
             return [
                 #self.create_tasks_from_previoustask_factory(createtasks_ListWMSLayers),
                 self._reportwriteaction,
                 self._warningwriteaction,
             ]
-        elif task_category == ListWMSLayers.category:
+        elif taskcls == ListWMSLayers:
             return [
                 self.create_tasks_from_previoustask_factory(createtasks_GetWMSLayerDetail),
                 self._reportwriteaction,
                 self._warningwriteaction,
             ]
-        elif task_category == GetFeatureTypeDetail.category:
+        elif taskcls == GetFeatureTypeDetail:
             return [
                 self.create_tasks_from_previoustask_factory(createtasks_TestFeatureTypeWMSService),
+                self.create_tasks_from_previoustask_factory(createtasks_TestFeatureTypeWMTSService),
                 self._reportwriteaction,
                 self._warningwriteaction,
             ]
-        elif task_category == GetWMSLayerDetail.category:
+        elif taskcls == GetWMSLayerDetail:
             return [
                 self._reportwriteaction,
                 self._warningwriteaction,
             ]
-        elif task_category == GetFeatureCount.category:
+        elif taskcls == GetFeatureCount:
             return [
                 self._reportwriteaction,
                 self._warningwriteaction,
             ]
-        elif task_category == TestFeatureTypeWMSService.category:
+        elif taskcls == TestFeatureTypeWMSService:
             return [
                 self._reportwriteaction,
                 self._warningwriteaction,
             ]
+        elif taskcls == TestFeatureTypeWMTSService:
+            return [
+                self._reportwriteaction,
+                self._warningwriteaction,
+            ]
+
 
         return None
         

@@ -4,6 +4,7 @@ import collections
 import requests
 import math
 import urllib.parse
+import tempfile
 
 from ..exceptions import *
 from .. import settings
@@ -119,8 +120,8 @@ class GridsetUtil(object):
 
 class EPSG4326Util(GridsetUtil):
     SRS = "EPSG:4326"
-    R2D = 180 / math.pi
-    D2R = math.pi / 180
+    #R2D = 180 / math.pi
+    #D2R = math.pi / 180
 
     def tile_lon(self,zoom,x) :
         assert x <= math.pow(2,zoom + 1),"The tile row index should be not greater than {}".format(int(math.pow(2,zoom + 1)))
@@ -128,11 +129,12 @@ class EPSG4326Util(GridsetUtil):
 
     def tile_lat(self,zoom,y) :
         assert y <=math.pow(2,zoom),"The tile column index should be not greater than {}".format(int(math.pow(2,zoom)))
-        return math.degrees(
-            math.atan(math.sinh(math.pi - (2.0 * math.pi * y) / math.pow(2.0, zoom)))
-        )
+        #return math.degrees(
+        #    math.atan(math.sinh(math.pi - (2.0 * math.pi * y) / math.pow(2.0, zoom)))
+        #)
         #n = math.pi - 2 * math.pi * y / math.pow(2, zoom)
         #return self.R2D * math.atan(0.5 * (math.exp(n) - math.exp(-n)))
+        return y / math.pow(2.0, zoom ) * -180.0 + 90
 
     def tile_bbox(self,zoom,x,y):
         """
@@ -142,8 +144,9 @@ class EPSG4326Util(GridsetUtil):
 
     def get_tile(self,lon_deg, lat_deg, zoom):
         xtile = int((lon_deg + 180.0) / 360.0 * math.pow(2.0,zoom + 1))
-        lat_rad = math.radians(lat_deg)
-        ytile = int((1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * math.pow(2.0,zoom))
+        #lat_rad = math.radians(lat_deg)
+        #ytile = int((1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * math.pow(2.0,zoom))
+        ytile = int((lat_deg - 90.0) / -180.0 * math.pow(2.0,zoom))
         return (xtile, ytile)
 
     def tiles(self,bbox, zoom):
@@ -207,6 +210,12 @@ class GWCMixin(object):
 
     def gridset_url(self,gridset):
         return "{}/gwc/rest/gridsets/{}".format(self.geoserver_url,gridset)
+
+    def tile_url(self,workspace,layername,zoom,row,column,gridset=settings.GWC_GRIDSET,format=settings.MAP_FORMAT,style=None,version=settings.WMTS_VERSION):
+        parameters = "service=WMTS&version={0}&request=GetTile&layer={1}%3A{2}&style={7}&format={8}&tilematrixset={3}&TileMatrix={3}%3A{4}&TileCol={6}&TileRow={5}".format(
+            version,workspace,layername,gridset,zoom,row,column,style or "",urllib.parse.quote(format)
+        )
+        return "{0}/gwc/service/wmts?{1}".format(self.geoserver_url,parameters)
 
     def _handle_gwcresponse_error(self,res):
         if res.status_code >= 400 and res.text.startswith("Unknown layer:"):
@@ -328,10 +337,35 @@ class GWCMixin(object):
     def get_tilebbox(self,zoom,xtile,ytile,gridset=settings.GWC_GRIDSET):
         return GridsetUtil.get_instance(self.get_gridset(gridset)["srs"]).tile_bbox(zoom,xtile,ytile)
 
-    def get_tile(self,workspace,layername,zoom,row,column,gridset=settings.GWC_GRIDSET,format=settings.MAP_FORMAT,style=None,version=settings.WMTS_VERSION):
-        params = "layer={0}:{1}&style={7}&tilematrixset={2}&Service=WMTS&Request=GetTile&Version={8}&Format={6}&TileMatrix={2}:{3}&TileCol={5}&TileRow={4}".format(workspace,layername,gridset,zoom,row,column,format,style or "",version)
-        url = "{0}?{1}".format(self.wmtsservice_url(workspace,layername),urllib.parse.quote(params))
+    def get_tile(self,workspace,layername,zoom,row,column,gridset=settings.GWC_GRIDSET,format=settings.MAP_FORMAT,style=None,version=settings.WMTS_VERSION,outputfile=None):
+        """
+        outputfile: a temporary file will be created if outputfile is None, the client has the responsibility to delete the outputfile
+        If succeed, save the image to outputfile
+        """
+        url = self.tile_url(workspace,layername,zoom,row,column,gridset=gridset,format=format,style=style,version=version)
+        logger.debug("Tile url={}".format(url))
         res = self.get(url,headers=self.accept_header("jpeg"),error_handler=self._handle_gwcresponse_error)
-        return res
-        
-
+        if res.headers.get("content-type") != format:
+            if res.headers.get("content-type","").startswith("text/"):
+                raise GetMapFailed("Failed to get the map of layer({}:{}).{}".format(workspace,layername,res.text))
+            else:
+                raise GetMapFailed("Failed to get the map of layer({}:{}).Expect '{}', but got '{}'".format(workspace,layername,format,res.headers.get("content-type","")))
+        if outputfile:
+            output = open(outputfile,'wb')
+        else:
+            output = tempfile.NamedTemporaryFile(
+                mode='wb',
+                prefix="gswmts_",
+                suffix=".{}".format(format.rsplit("/",1)[1] if "/" in format else format),
+                delete = False, 
+                delete_on_close = False
+            )
+            outputfile = output.name
+        try:
+            for data in res.iter_content(chunk_size = 1024):
+                output.write(data)
+            logger.debug("WMTS image was saved to {}".format(outputfile))
+            return outputfile
+        finally:
+            output.close()
+    
