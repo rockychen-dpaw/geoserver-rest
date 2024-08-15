@@ -1,8 +1,11 @@
 import logging
+import urllib.parse
 import os
+import tempfile
 import xml.etree.ElementTree as ET
 
 from ..exceptions import *
+from .. import settings
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +126,48 @@ class FeaturetypeMixin(object):
     def featurecount_url(self,workspace,layername):
         return "{}/wfs?service=wfs&version=2.0.0&request=GetFeature&outputFormat=application%2Fxml&typeNames={}:{}&resultType=hits".format(self.geoserver_url,workspace,layername)
 
+    def features_url(self,workspace,layername,count=5,bbox=None,srs=None):
+        """
+        bbox: (minx,miny,maxx,maxy) or {"minx":0,"miny":0,"maxx":0,"maxy":0}
+        """
+        return "{0}/wfs?service=wfs&version=2.0.0&request=GetFeature&outputFormat=application%2Fjson&typeNames={1}:{2}{3}{4}{5}".format(
+            self.geoserver_url,
+            workspace,
+            layername,
+            "&count={}".format(count) if count is not None and count > 0 else "",
+            "&srsName={}".format(urllib.parse.quote(srs)) if srs and bbox else "",
+            "&bbox={}".format(",".join(str(bbox[i]) for i in (1,0,3,2)) if isinstance(bbox,(list,tuple)) else ",".join(str(bbox[k]) for k in ("miny","minx","maxy","maxx"))) if srs and bbox else "",
+        )
+
+    def wfscapabilities_url(self,version="2.0.0"):
+        if version == "2.0.0":
+            return "{}/ows?service=WFS&acceptversions=2.0.0&request=GetCapabilities".format(self.geoserver_url)
+        elif version == "1.1.0":
+            return "{}/ows?service=WFS&version=1.1.0&request=GetCapabilities".format(self.geoserver_url)
+        else:
+            return "{}/ows?service=WFS&version=1.0.0&request=GetCapabilities".format(self.geoserver_url)
+
+    def get_wfscapabilities(self,version="2.0.0",outputfile=None):
+        res = self.get(self.wfscapabilities_url(version=version),headers=self.accept_header("xml"))
+        if outputfile:
+            output = open(outputfile,'wb')
+        else:
+            output = tempfile.NamedTemporaryFile(
+                mode='wb',
+                prefix="gswmtscapabilities_",
+                suffix=".xml",
+                delete = False, 
+                delete_on_close = False
+            )
+            outputfile = output.name
+        try:
+            for data in res.iter_content(chunk_size = 1024):
+                output.write(data)
+            logger.debug("WMTS capabilities was saved to {}".format(outputfile))
+            return outputfile
+        finally:
+            output.close()
+
     def has_featuretype(self,workspace,layername,storename=None):
         return self.has(self.featuretype_url(workspace,layername,storename=storename))
     
@@ -140,13 +185,21 @@ class FeaturetypeMixin(object):
         """
         Return the number of features 
         """
-        res = self.get(self.featurecount_url(workspace,layername),headers=self.accept_header("xml"))
+        res = self.get(self.featurecount_url(workspace,layername),headers=self.accept_header("xml"),timeout=settings.GETFEATURE_TIMEOUT)
         try:
             data = ET.fromstring(res.text)
             return int(data.attrib["numberMatched"])
         except Exception as ex:
             raise Exception("Failed to parse the xml data.{}".format(res.text))
     
+    def get_features(self,workspace,layername,storename=None,count=5,bbox=None,srs=None):
+        """
+        bbox: (minx,miny,maxx,maxy) or {"minx":0,"miny":0,"maxx":0,"maxy":0}
+        Return the number of features 
+        """
+        res = self.get(self.features_url(workspace,layername,count=count,bbox=bbox,srs=srs),headers=self.accept_header("json"),timeout=settings.GETFEATURE_TIMEOUT)
+        return res.json()
+
     def list_featuretypes(self,workspace,storename=None):
         """
         Return the list of featuretypes belonging to the workspace and storename(if not empty)

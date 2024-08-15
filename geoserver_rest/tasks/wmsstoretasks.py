@@ -1,6 +1,6 @@
 from .base import Task
 
-class ListWMSstores(Task):
+class ListWMSStores(Task):
     """
     Return [store]
     """
@@ -12,12 +12,14 @@ class ListWMSstores(Task):
         self.workspace = workspace
 
     def _format_result(self):
-        return " , ".join(self.result) if self.result else ""
+        return "WMSStores = {}".format(len(self.result) if self.result else 0)
 
     def _exec(self,geoserver):
-        return geoserver.list_wmsstores(self.workspace) or []
+        result = geoserver.list_wmsstores(self.workspace) or []
+        result.sort()
+        return result
                 
-def createtasks_ListWMSstores(listWorkspacesTask,limit = 0):
+def createtasks_ListWMSStores(listWorkspacesTask,limit = 0):
     """
     a generator to return list datastore tasks
     """
@@ -28,6 +30,6 @@ def createtasks_ListWMSstores(listWorkspacesTask,limit = 0):
         row += 1
         if limit > 0 and row > limit:
             break
-        yield ListWMSstores(w,post_actions_factory=listWorkspacesTask.post_actions_factory)
+        yield ListWMSStores(w,post_actions_factory=listWorkspacesTask.post_actions_factory)
 
     

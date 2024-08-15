@@ -3,4 +3,5 @@ from .datastoretasks import *
 from .featuretypetasks import *
 from .wmsstoretasks import *
 from .wmslayertasks import *
+from .layergrouptasks import *
 from .mapservicetasks import *

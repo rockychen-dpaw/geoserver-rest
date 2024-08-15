@@ -1,6 +1,8 @@
 import logging
 import requests
 
+from ..exceptions import *
+
 logger = logging.getLogger(__name__)
 
 GROUP_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -35,10 +37,17 @@ class LayergroupMixin(object):
         return "{0}/rest/workspaces/{1}/layergroups/{2}".format(self.geoserver_url,workspace,groupname)
     
     def has_layergroup(self,workspace,groupname):
-        return self.has(self.layergroup_url(workspace,groupname),headers=accept_header("json"))
+        return self.has(self.layergroup_url(workspace,groupname),headers=self.accept_header("json"))
+    
+    def get_layergroup(self,workspace,groupname):
+        try:
+            res = self.get(self.layergroup_url(workspace,groupname),headers=self.accept_header("json"))
+            return res.json()["layerGroup"]
+        except ResourceNotFound as ex:
+            return None
     
     def list_layergroups(self,workspace):
-        res = self.get(self.layergroups_url(workspace),headers=accept_header("json"))
+        res = self.get(self.layergroups_url(workspace),headers=self.accept_header("json"))
         return [str(g["name"]) for g in (res.json().get("layerGroups") or {}).get("layerGroup") or [] ]
     
     

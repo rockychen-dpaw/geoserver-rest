@@ -6,6 +6,7 @@ class CSVWriter(object):
         self.file_output = open(self.file,'w')
         self.header = header
         self.writer = csv.writer(self.file_output,escapechar='\\')
+        self.records = 0
         if self.header:
             self.writer.writerow(self.header)
 
@@ -14,20 +15,16 @@ class CSVWriter(object):
             raise Exception("File({}) was already closed".format(self.file))
         if not rows:
             return
-        self.writer.writerows(rows)
+        for row in rows:
+            self.writerow(row)
     
     def writerow(self,row):
         if not self.writer:
             raise Exception("File({}) was already closed".format(self.file))
         if row is None:
             return
+        self.records += 1
         self.writer.writerow(row)
-
-    def write_taskreport(self,task):
-        self.writerows(task.reportrows())
-
-    def write_taskwarnings(self,task):
-        self.writerows(task.warnings())
 
     def close(self):
         try:

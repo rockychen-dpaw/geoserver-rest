@@ -6,6 +6,7 @@ import requests
 
 from .mixins import *
 from .exceptions import *
+from . import settings
 
 logger = logging.getLogger(__name__)
 
@@ -78,35 +79,35 @@ class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMi
         self.headers = headers
 
 
-    def get(self,url,headers=GeoserverUtils.accept_header("json"),timeout=30,error_handler=None):
+    def get(self,url,headers=GeoserverUtils.accept_header("json"),timeout=settings.GEOSERVER_TIMEOUT,error_handler=None):
         if self.headers:
             headers = collections.ChainMap(headers,self.headers)
         res = requests.get(url , headers=headers, auth=(self.username,self.password),timeout=timeout)
         (error_handler or self._handle_response_error)(res)
         return res
 
-    def has(self,url,headers=GeoserverUtils.accept_header("json"),timeout=30,error_handler=None):
+    def has(self,url,headers=GeoserverUtils.accept_header("json"),timeout=settings.GEOSERVER_TIMEOUT,error_handler=None):
         try:
             r = self.get(url , headers=headers,timeout=timeout,error_handler=error_handler)
             return True if r.status_code == 200 else False
         except ResourceNotFound as ex:
             return False
 
-    def post(self,url,data,headers=GeoserverUtils.contenttype_header("xml"),timeout=30,error_handler=None):
+    def post(self,url,data,headers=GeoserverUtils.contenttype_header("xml"),timeout=settings.GEOSERVER_TIMEOUT,error_handler=None):
         if self.headers:
             headers = collections.ChainMap(headers,self.headers)
         res = requests.post(url , data=data , headers=headers, auth=(self.username,self.password),timeout=timeout)
         (error_handler or self._handle_response_error)(res)
         return res
 
-    def put(self,url,data,headers=GeoserverUtils.contenttype_header("xml"),timeout=30,error_handler=None):
+    def put(self,url,data,headers=GeoserverUtils.contenttype_header("xml"),timeout=settings.GEOSERVER_TIMEOUT,error_handler=None):
         if self.headers:
             headers = collections.ChainMap(headers,self.headers)
         res = requests.put(url , data=data , headers=headers, auth=(self.username,self.password),timeout=timeout)
         (error_handler or self._handle_response_error)(res)
         return res
 
-    def delete(self,url,headers=None,timeout=30,error_handler=None):
+    def delete(self,url,headers=None,timeout=settings.GEOSERVER_TIMEOUT,error_handler=None):
         if self.headers:
             headers = collections.ChainMap(headers,self.headers)
         res = requests.delete(url , auth=(self.username,self.password),headers=headers,timeout=timeout)

@@ -45,6 +45,27 @@ def dbtime(dt=None):
 def format(dt=None,pattern="%Y-%m-%d %H:%M:%S",timezone=None):
     return localtime(dt,timezone=timezone).strftime(pattern)
 
+def format_timedelta(td,ignore_milliseconds = True):
+    if not td:
+        return "0 seconds"
+    days = td.days
+    seconds = td.seconds
+    hours = int(seconds / 3600)
+    seconds = seconds % 3600
+    minutes = int(seconds / 60)
+    seconds = seconds % 60
+
+    result = ("1 Day" if days == 1 else "{} Days".format(days))  if days > 0 else None
+    result = "{}{}".format("{} ".format(result) if result else "",("1 Hour" if hours == 1 else "{} Hours".format(hours)))  if hours > 0 else result
+    result = "{}{}".format("{} ".format(result) if result else "",("1 Minute" if minutes == 1 else "{} Minutes".format(minutes)))  if minutes > 0 else result
+    result = "{}{}".format("{} ".format(result) if result else "",("1 Second" if seconds == 1 else "{} Seconds".format(seconds)))  if seconds > 0 else result
+    
+    if not ignore_milliseconds:
+        milliseconds = int(td.microseconds / 1000)
+        result = "{}{}".format("{} ".format(result) if result else "",("1 Millisecond" if milliseconds == 1 else "{} Milliseconds".format(milliseconds)))  if milliseconds > 0 else result
+
+    return result
+
 def timestamp(dt=None):
     return  localtime(dt,timezone=timezone.utc).timestamp()
 

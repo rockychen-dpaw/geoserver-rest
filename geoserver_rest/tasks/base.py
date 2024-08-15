@@ -5,6 +5,8 @@ import json
 from .. import timezone
 
 class Task(object):
+    WARNING = "Warning"
+    ERROR = "Error"
     queuetime = None
     starttime = None
     endtime = None
@@ -28,8 +30,8 @@ class Task(object):
         """
         if self.arguments:
             for arg in self.arguments :
-                if getattr(self,arg):
-                    yield (arg,getattr(self,arg))
+                v = getattr(self,arg)
+                yield (arg,"" if v is None else v)
 
     def format_parameters(self,separator=","):
         return separator.join("{}={}".format(k,json.dumps(v)) for k,v in self.parameters)
@@ -75,7 +77,7 @@ class Task(object):
         if self.exceptions:
             yield (self.category,
                 self.format_parameters("\r\n"),
-                "Error",
+                self.ERROR,
                 timezone.format(self.starttime,"%Y-%m-%d %H:%M:%S.%f") if self.starttime else "",
                 timezone.format(self.endtime,"%Y-%m-%d %H:%M:%S.%f") if self.endtime else "",
                 (self.endtime - self.starttime).total_seconds() if self.starttime and self.endtime else "",
@@ -83,10 +85,10 @@ class Task(object):
             )
 
         if self.is_succeed:
-            for msg in (self._warnings() or []):
+            for level,msg in (self._warnings() or []):
                 yield (self.category,
                     self.format_parameters("\r\n"),
-                    "Warning",
+                    level,
                     timezone.format(self.starttime,"%Y-%m-%d %H:%M:%S.%f") if self.starttime else "",
                     timezone.format(self.endtime,"%Y-%m-%d %H:%M:%S.%f") if self.endtime else "",
                     (self.endtime - self.starttime).total_seconds() if self.starttime and self.endtime else "",
@@ -96,6 +98,7 @@ class Task(object):
     def _warnings(self):
         """
         Report the warnings and errors from the task result
+        return a generator to return (level,msg)
         """
         pass
 

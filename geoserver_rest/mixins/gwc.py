@@ -211,14 +211,39 @@ class GWCMixin(object):
     def gridset_url(self,gridset):
         return "{}/gwc/rest/gridsets/{}".format(self.geoserver_url,gridset)
 
-    def tile_url(self,workspace,layername,zoom,row,column,gridset=settings.GWC_GRIDSET,format=settings.MAP_FORMAT,style=None,version=settings.WMTS_VERSION):
+    def tile_url(self,workspace,layername,zoom,row,column,gridset=settings.GWC_GRIDSET,format="image/jpeg",style=None,version=settings.WMTS_VERSION):
         parameters = "service=WMTS&version={0}&request=GetTile&layer={1}%3A{2}&style={7}&format={8}&tilematrixset={3}&TileMatrix={3}%3A{4}&TileCol={6}&TileRow={5}".format(
             version,workspace,layername,gridset,zoom,row,column,style or "",urllib.parse.quote(format)
         )
         return "{0}/gwc/service/wmts?{1}".format(self.geoserver_url,parameters)
 
+    def wmtscapabilities_url(self,version="1.1.1"):
+        return "{}/gwc/service/wmts?service=WMTS&version=1.1.1&request=GetCapabilities".format(self.geoserver_url)
+
+    def get_wmtscapabilities(self,version="1.1.1",outputfile=None):
+        res = self.get(self.wmtscapabilities_url(version=version),headers=self.accept_header("xml"))
+        if outputfile:
+            output = open(outputfile,'wb')
+        else:
+            output = tempfile.NamedTemporaryFile(
+                mode='wb',
+                prefix="gswmtscapabilities_",
+                suffix=".xml",
+                delete = False, 
+                delete_on_close = False
+            )
+            outputfile = output.name
+        try:
+            for data in res.iter_content(chunk_size = 1024):
+                output.write(data)
+            logger.debug("WMTS capabilities was saved to {}".format(outputfile))
+            return outputfile
+        finally:
+            output.close()
+    
+
     def _handle_gwcresponse_error(self,res):
-        if res.status_code >= 400 and res.text.startswith("Unknown layer:"):
+        if res.status_code >= 400 and "Unknown layer" in res.text:
             raise ResourceNotFound(response=res)
         super()._handle_response_error(res)
 
@@ -337,14 +362,17 @@ class GWCMixin(object):
     def get_tilebbox(self,zoom,xtile,ytile,gridset=settings.GWC_GRIDSET):
         return GridsetUtil.get_instance(self.get_gridset(gridset)["srs"]).tile_bbox(zoom,xtile,ytile)
 
-    def get_tile(self,workspace,layername,zoom,row,column,gridset=settings.GWC_GRIDSET,format=settings.MAP_FORMAT,style=None,version=settings.WMTS_VERSION,outputfile=None):
+    def get_tile_count(self,gridset,bbox,zoom):
+        return GridsetUtil.get_instance(self.get_gridset(gridset)["srs"]).get_tile_count(bbox,zoom)
+
+    def get_tile(self,workspace,layername,zoom,row,column,gridset=settings.GWC_GRIDSET,format="image/jpeg",style=None,version=settings.WMTS_VERSION,outputfile=None):
         """
         outputfile: a temporary file will be created if outputfile is None, the client has the responsibility to delete the outputfile
         If succeed, save the image to outputfile
         """
         url = self.tile_url(workspace,layername,zoom,row,column,gridset=gridset,format=format,style=style,version=version)
         logger.debug("Tile url={}".format(url))
-        res = self.get(url,headers=self.accept_header("jpeg"),error_handler=self._handle_gwcresponse_error)
+        res = self.get(url,headers=self.accept_header("jpeg"),error_handler=self._handle_gwcresponse_error,timeout=settings.WMTS_TIMEOUT)
         if res.headers.get("content-type") != format:
             if res.headers.get("content-type","").startswith("text/"):
                 raise GetMapFailed("Failed to get the map of layer({}:{}).{}".format(workspace,layername,res.text))

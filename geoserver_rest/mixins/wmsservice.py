@@ -3,6 +3,7 @@ import tempfile
 import logging
 
 from ..exceptions import *
+from .. import settings
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ class WMSServiceMixin(object):
         """
         url = self.map_url(workspace,layername,bbox,version=version,srs=srs,width=width,height=height,format=format,style=style)
         logger.debug("get map url = {}".format(url))
-        res = self.get(url,headers=self.accept_header(format),timeout=600)
+        res = self.get(url,headers=self.accept_header(format),timeout=settings.WMS_TIMEOUT)
         if res.headers.get("content-type") != format:
             if res.headers.get("content-type","").startswith("text/"):
                 raise GetMapFailed("Failed to get the map of layer({}:{}).{}".format(workspace,layername,res.text),res)

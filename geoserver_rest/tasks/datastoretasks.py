@@ -12,10 +12,12 @@ class ListDatastores(Task):
         self.workspace = workspace
 
     def _format_result(self):
-        return " , ".join(self.result) if self.result else ""
+        return "Datastores = {}".format(len(self.result) if self.result else 0)
 
     def _exec(self,geoserver):
-        return geoserver.list_datastores(self.workspace) or []
+        result =  geoserver.list_datastores(self.workspace) or []
+        result.sort()
+        return result
 
 def createtasks_ListDatastores(listWorkspacesTask,limit = 0):
     """

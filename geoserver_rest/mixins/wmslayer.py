@@ -1,5 +1,6 @@
 import logging
 import os
+import tempfile
 
 from ..exceptions import *
 
@@ -76,6 +77,33 @@ class WMSLayerMixin(object):
         else:
             return "{0}/rest/workspaces/{1}/wmslayers/{2}.{3}".format(self.geoserver_url,workspace,layername,format)
     
+    def wmscapabilities_url(self,version="1.3.0"):
+        if version == "1.3.0":
+            return "{}/ows?service=WMS&version=1.3.0&request=GetCapabilities".format(self.geoserver_url)
+        else:
+            return "{}/ows?service=WMS&version=1.1.1&request=GetCapabilities".format(self.geoserver_url)
+
+    def get_wmscapabilities(self,version="1.3.0",outputfile=None):
+        res = self.get(self.wmscapabilities_url(version=version),headers=self.accept_header("xml"))
+        if outputfile:
+            output = open(outputfile,'wb')
+        else:
+            output = tempfile.NamedTemporaryFile(
+                mode='wb',
+                prefix="gswmtscapabilities_",
+                suffix=".xml",
+                delete = False, 
+                delete_on_close = False
+            )
+            outputfile = output.name
+        try:
+            for data in res.iter_content(chunk_size = 1024):
+                output.write(data)
+            logger.debug("WMTS capabilities was saved to {}".format(outputfile))
+            return outputfile
+        finally:
+            output.close()
+
     def has_wmslayer(self,workspace,layername,storename=None):
         return self.has(self.wmslayer_url(workspace,layername,storename=storename,format="json"),headers=self.accept_header("json"))
     

@@ -7,30 +7,50 @@ from .. import settings
 
 logger = logging.getLogger(__name__)
 
-class TestFeatureTypeWMSService(Task):
-    """
-    Test the wms service of the feature type
-    """
-    arguments = ("workspace","datastore","featuretype","style","bbox","srs","dimension","format")
-    category = "Test Feature WMS Service"
+class WMTSGetCapabilitiesTask(Task):
+    category = "Get WMTS Capabilities"
+    url = None
 
-    bbox = None
-    srs = None
-    dimension = None
-    format = settings.MAP_FORMAT
-    
+    def _format_result(self):
+        return "URL : {}\r\ncapabilities file size = {}".format(self.url or "",self.result)
 
-    def __init__(self,workspace,datastore,featuretype,layer_bbox,style,post_actions_factory = None,zoom=12):
+    def _exec(self,geoserver):
+        self.url = geoserver.wmtscapabilities_url()
+        file = geoserver.get_wmtscapabilities()
+        try:
+            return os.path.getsize(file)
+        finally:
+            try:
+                os.remove(file)
+            except:
+                logger.error("Failed to delete temporary file '{}'".format(file))
+                pass
+
+class TestWMTSService(Task):
+    """
+    Test the wms service of layer
+    """
+    row = None
+    column = None
+    format = settings.TEST_FORMAT
+    url = None
+
+    def __init__(self,workspace,store,layername,layer_bbox,style,post_actions_factory = None,zoom=-1,gridset=settings.GWC_GRIDSET):
+        """
+        if zoom is -1. zoom will be set to the level which one tile contains the whole layerbox if zoom is -1, and then find the row and column
+        otherwise, find the center point of layer box , and then find the row and column based on the zoom level
+        """
         super().__init__(post_actions_factory = post_actions_factory) 
+        self.gridset = gridset
         self.workspace = workspace
-        self.datastore = datastore
-        self.featuretype = featuretype
-        self.layer_bbox = layer_bbox
+        self._store = store
+        self._layername = layername
         self.style = style
         self.zoom = zoom
+        self.gridset = gridset
+        self.gridsetdata = None
 
-    def get_tileposition(self,geoserver):
-        #get the intersection between layer_box and settings.MAX_BBOX
+        self.layer_bbox = layer_bbox
         if self.layer_bbox[0] < settings.MAX_BBOX[0]:
             self.layer_bbox[0] = settings.MAX_BBOX[0]
         if self.layer_bbox[1] < settings.MAX_BBOX[1]:
@@ -42,22 +62,100 @@ class TestFeatureTypeWMSService(Task):
         if self.layer_bbox[3] > settings.MAX_BBOX[3]:
             self.layer_bbox[3] = settings.MAX_BBOX[3]
         
-        center_point = [(self.layer_bbox[0] + self.layer_bbox[2])/2,(self.layer_bbox[1] + self.layer_bbox[3])/2]
-        xtile,ytile = geoserver.get_tileposition(center_point[0],center_point[1],self.zoom,gridset = settings.GWC_GRIDSET)
-        return (xtile,ytile)
-        
+
     def _format_result(self):
-        return "image size = {}".format(self.result)
+        return "URL : {}\r\nimage size = {}".format(self.url or "",self.result)
+
+    def set_with_gridset(self,geoserver):
+        self.gridsetdata = geoserver.get_gridset(self.gridset)
+        maxZoom = len(self.gridsetdata["resolutions"]) - 1
+        if self.zoom >= 0:
+            if self.zoom > maxZoom:
+                self.zoom = maxZoom
+        else:
+            zoom = maxZoom
+            while zoom > 0:
+                if geoserver.get_tile_count(self.gridset,self.layer_bbox,zoom) > 1:
+                    zoom -= 1
+                else:
+                    self.zoom = zoom
+                    break
+
+            if self.zoom < 0:
+                self.zoom = 0
+
+    def get_tileposition(self,geoserver):
+        #get the intersection between layer_box and settings.MAX_BBOX
+        self.set_with_gridset(geoserver)
+        
+        center_point = [(self.layer_bbox[0] + self.layer_bbox[2])/2,(self.layer_bbox[1] + self.layer_bbox[3])/2]
+        xtile,ytile = geoserver.get_tileposition(center_point[0],center_point[1],self.zoom,gridset = self.gridset)
+        return (xtile,ytile)
+
+    def _exec(self,geoserver):
+        self.column,self.row = self.get_tileposition(geoserver)
+        self.format = settings.TEST_FORMAT
+
+        self.url = geoserver.tile_url(
+            self.workspace,
+            self._layername,
+            self.zoom,
+            self.row,
+            self.column,
+            gridset=self.gridset,
+            style=self.style or "",
+            format=self.format
+        )
+        img = geoserver.get_tile(
+            self.workspace,
+            self._layername,
+            self.zoom,
+            self.row,
+            self.column,
+            gridset=self.gridset,
+            style=self.style or "",
+            format=self.format
+        )
+        try:
+            return os.path.getsize(img)
+        finally:
+            try:
+                os.remove(img)
+            except:
+                logger.error("Failed to delete temporary file '{}'".format(img))
+                pass
+
+class TestWMSService(TestWMTSService):
+    """
+    Test the wms service of the feature type
+    """
+    bbox = None
+    srs = None
+    dimension = None
+
+    def set_with_gridset(self,geoserver):
+        super().set_with_gridset(geoserver)
+        self.srs = self.gridsetdata["srs"]
+        self.dimension = (self.gridsetdata["tileWidth"],self.gridsetdata["tileWidth"])
 
     def _exec(self,geoserver):
         xtile,ytile = self.get_tileposition(geoserver)
-        self.bbox = geoserver.get_tilebbox(self.zoom,xtile,ytile,gridset = settings.GWC_GRIDSET)
-        gridset_data = geoserver.get_gridset(settings.GWC_GRIDSET)
-        self.srs = gridset_data["srs"]
-        self.dimension = (gridset_data["tileWidth"],gridset_data["tileWidth"])
+        self.bbox = geoserver.get_tilebbox(self.zoom,xtile,ytile,gridset = self.gridset)
+        self.url = geoserver.map_url(
+            self.workspace,
+            self._layername,
+            self.bbox,
+            srs=self.srs,
+            style=self.style or "",
+            width=self.dimension[0],
+            height=self.dimension[1],
+            format=self.format
+        )
 
-
-        img = geoserver.get_map(self.workspace,self.featuretype,self.bbox,
+        img = geoserver.get_map(
+            self.workspace,
+            self._layername,
+            self.bbox,
             srs=self.srs,
             style=self.style or "",
             width=self.dimension[0],
@@ -73,40 +171,60 @@ class TestFeatureTypeWMSService(Task):
                 logger.error("Failed to delete temporary file '{}'".format(img))
                 pass
 
-class TestFeatureTypeWMTSService(TestFeatureTypeWMSService):
+class TestWMTSService4FeatureType(TestWMTSService):
     """
     Test the wms service of the feature type
     """
-    arguments = ("workspace","datastore","featuretype","gridset","zoom","row","column","format")
-    category = "Test Feature WMTS Service"
-    row = None
-    column = None
+    arguments = ("workspace","datastore","featuretype","gridset","zoom","row","column","style","format")
+    category = "Test WMTS Service for FeatureType"
 
-    def __init__(self,workspace,datastore,featuretype,layer_bbox,style,post_actions_factory = None,zoom=12,gridset=settings.GWC_GRIDSET):
-        super().__init__(workspace,datastore,featuretype,layer_bbox,style,post_actions_factory = post_actions_factory,zoom=zoom) 
-        self.gridset = gridset
+    @property
+    def datastore(self):
+        return self._store
 
-    def _exec(self,geoserver):
-        self.column,self.row = self.get_tileposition(geoserver)
-        self.format = settings.MAP_FORMAT
+    @property 
+    def featuretype(self):
+        return self._layername
+    
+class TestWMSService4FeatureType(TestWMSService,TestWMTSService4FeatureType):
+    arguments = ("workspace","datastore","featuretype","srs","bbox","style","dimension","format")
+    category = "Test WMS Service for FeatureType"
 
-        img = geoserver.get_tile(self.workspace,self.featuretype,self.zoom,self.row,self.column,
-            gridset=self.gridset,
-            style=self.style or "",
-            format=self.format
-        )
-        try:
-            return os.path.getsize(img)
-        finally:
-            try:
-                os.remove(img)
-            except:
-                logger.error("Failed to delete temporary file '{}'".format(img))
-                pass
+class TestWMTSService4WMSLayer(TestWMTSService):
+    category = "Test WMTS Service for WMSLayer"
+    arguments = ("workspace","wmsstore","layername","gridset","zoom","row","column","style","format")
 
-def createtasks_TestFeatureTypeWMSService(getFeatureTypeDetailTask,limit = 0):
+    @property
+    def wmsstore(self):
+        return self._store
+    
+    @property 
+    def layername(self):
+        return self._layername
+    
+class TestWMSService4WMSLayer(TestWMSService,TestWMTSService4WMSLayer):
+    arguments = ("workspace","wmsstore","layername","srs","bbox","style","dimension","format")
+    category = "Test WMS Service for WMSLayer"
+
+
+class TestWMTSService4Layergroup(TestWMTSService):
+    category = "Test WMTS Service for Layergroup"
+    arguments = ("workspace","layergroup","gridset","zoom","row","column","style")
+
+    def __init__(self,workspace,layergroup,layer_bbox,style,post_actions_factory = None,zoom=-1,gridset=settings.GWC_GRIDSET):
+        super().__init__(workspace,None,layergroup,layer_bbox,style,post_actions_factory = post_actions_factory,zoom=zoom,gridset=gridset)
+
+    @property 
+    def layergroup(self):
+        return self._layername
+    
+class TestWMSService4Layergroup(TestWMSService,TestWMTSService4Layergroup):
+    arguments = ("workspace","layergroup","srs","bbox","style","dimension","format")
+    category = "Test WMS Service for Layergroup"
+
+def createtasks_TestWMSService4FeatureType(getFeatureTypeDetailTask,limit = 0):
     """
-    a generator to return TestFeatureTypeWMSService tasks
+    a generator to return TestWMSService4FeatureType tasks
     """
     if not getFeatureTypeDetailTask.result:
         return
@@ -117,29 +235,31 @@ def createtasks_TestFeatureTypeWMSService(getFeatureTypeDetailTask,limit = 0):
 
     layer_bbox = [layer_bbox[k] for k in ("minx","miny","maxx","maxy")]
 
-    yield TestFeatureTypeWMSService(
+    yield TestWMSService4FeatureType(
         getFeatureTypeDetailTask.workspace,
         getFeatureTypeDetailTask.datastore,
         getFeatureTypeDetailTask.featuretype,
         layer_bbox,
         None,
+        zoom = settings.TEST_ZOOM,
         post_actions_factory=getFeatureTypeDetailTask.post_actions_factory)
 
     if getFeatureTypeDetailTask.result.get("alternativeStyles"):
         for style in getFeatureTypeDetailTask.result["alternativeStyles"]:
-            yield TestFeatureTypeWMSService(
+            yield TestWMSService4FeatureType(
                 getFeatureTypeDetailTask.workspace,
                 getFeatureTypeDetailTask.datastore,
                 getFeatureTypeDetailTask.featuretype,
                 layer_bbox,
-                getFeatureTypeDetailTask.result["defaultStyle"],
+                style,
+                zoom = settings.TEST_ZOOM,
                 post_actions_factory=getFeatureTypeDetailTask.post_actions_factory
             )
 
 
-def createtasks_TestFeatureTypeWMTSService(getFeatureTypeDetailTask,limit = 0):
+def createtasks_TestWMTSService4FeatureType(getFeatureTypeDetailTask,limit = 0):
     """
-    a generator to return TestFeatureTypeWMSService tasks
+    a generator to return TestWMSService4FeatureType tasks
     """
     if not getFeatureTypeDetailTask.result:
         return
@@ -153,15 +273,205 @@ def createtasks_TestFeatureTypeWMTSService(getFeatureTypeDetailTask,limit = 0):
     layer_bbox = [layer_bbox[k] for k in ("minx","miny","maxx","maxy")]
 
     for gridset in settings.GWC_GRIDSETS:
-        if not any(gridsetdata["gridSetName"] == gridset  for gridsetdata in getFeatureTypeDetailTask.result["gwc"]["gridSubsets"]):
+        gridsetdata = next((gridsetdata  for gridsetdata in getFeatureTypeDetailTask.result["gwc"]["gridSubsets"] if gridsetdata["gridSetName"] == gridset),None)
+        if not gridsetdata:
             continue
-        yield TestFeatureTypeWMTSService(
+        zoom = settings.TEST_ZOOM
+        zoomStart = gridsetdata.get("zoomStart",0)
+        zoomEnd = gridsetdata.get("zoomEnd",None)
+        if zoom < zoomStart:
+            zoom  = zoomStart
+        if zoomEnd is not None and zoom > zoomEnd:
+            zoom = zoomEnd
+
+        yield TestWMTSService4FeatureType(
             getFeatureTypeDetailTask.workspace,
             getFeatureTypeDetailTask.datastore,
             getFeatureTypeDetailTask.featuretype,
             layer_bbox,
             None,
             post_actions_factory=getFeatureTypeDetailTask.post_actions_factory,
-            gridset=gridset
+            gridset=gridset,
+            zoom=zoom
+        )
+
+def createtasks_TestWMSService4Feature(getFeaturesTask,limit = 0):
+    """
+    a generator to return TestWMSService4FeatureType tasks
+    """
+    if not getFeaturesTask.result or not getFeaturesTask.result.get("features"):
+        return
+    #get the intersection between layer_box and settings.MAX_BBOX
+    layer_bbox = getFeaturesTask.result["features"][0].get("bbox")
+    if not layer_bbox or any(d is None for d in layer_bbox ):
+        return
+
+    yield TestWMSService4FeatureType(
+        getFeaturesTask.workspace,
+        getFeaturesTask.datastore,
+        getFeaturesTask.featuretype,
+        layer_bbox,
+        None,
+        zoom = -1,
+        post_actions_factory=getFeaturesTask.post_actions_factory)
+
+    if getFeaturesTask.result.get("alternativeStyles"):
+        for style in getFeaturesTask.result["alternativeStyles"]:
+            yield TestWMSService4FeatureType(
+                getFeaturesTask.workspace,
+                getFeaturesTask.datastore,
+                getFeaturesTask.featuretype,
+                layer_bbox,
+                style,
+                zoom = -1,
+                post_actions_factory=getFeaturesTask.post_actions_factory
+            )
+
+
+def createtasks_TestWMTSService4Feature(getFeaturesTask,limit = 0):
+    """
+    a generator to return TestWMSService4FeatureType tasks
+    """
+    if not getFeaturesTask.result or not getFeaturesTask.result.get("features"):
+        return
+    if not getFeaturesTask.featuredetail.get("gwc"):
+        return
+    #get the intersection between layer_box and settings.MAX_BBOX
+    layer_bbox = getFeaturesTask.result["features"][0].get("bbox")
+    if not layer_bbox or any(d is None for d in layer_bbox ):
+        return
+    
+    for gridset in settings.GWC_GRIDSETS:
+        gridsetdata = next((gridsetdata  for gridsetdata in getFeaturesTask.featuredetail["gwc"]["gridSubsets"] if gridsetdata["gridSetName"] == gridset),None)
+        if not gridsetdata:
+            continue
+
+        yield TestWMTSService4FeatureType(
+            getFeaturesTask.workspace,
+            getFeaturesTask.datastore,
+            getFeaturesTask.featuretype,
+            layer_bbox,
+            None,
+            post_actions_factory=getFeaturesTask.post_actions_factory,
+            gridset=gridset,
+            zoom=-1
+        )
+
+def createtasks_TestWMSService4WMSLayer(getWMSLayerDetailTask,limit = 0):
+    """
+    a generator to return TestWMSService4FeatureType tasks
+    """
+    if not getWMSLayerDetailTask.result:
+        return
+    #get the intersection between layer_box and settings.MAX_BBOX
+    layer_bbox = getWMSLayerDetailTask.result.get("latLonBoundingBox")
+    if not layer_bbox or any(layer_bbox.get(k) is None for k in ("minx","miny","maxx","maxy")):
+        return
+
+    layer_bbox = [layer_bbox[k] for k in ("minx","miny","maxx","maxy")]
+
+    yield TestWMSService4WMSLayer(
+        getWMSLayerDetailTask.workspace,
+        getWMSLayerDetailTask.wmsstore,
+        getWMSLayerDetailTask.layername,
+        layer_bbox,
+        None,
+        zoom = settings.TEST_ZOOM,
+        post_actions_factory=getWMSLayerDetailTask.post_actions_factory)
+
+def createtasks_TestWMTSService4WMSLayer(getWMSLayerDetailTask,limit = 0):
+    """
+    a generator to return TestWMSService4FeatureType tasks
+    """
+    if not getWMSLayerDetailTask.result:
+        return
+    if not getWMSLayerDetailTask.result.get("gwc"):
+        return
+    #get the intersection between layer_box and settings.MAX_BBOX
+    layer_bbox = getWMSLayerDetailTask.result.get("latLonBoundingBox")
+    if not layer_bbox or any(layer_bbox.get(k) is None for k in ("minx","miny","maxx","maxy")):
+        return
+    
+    layer_bbox = [layer_bbox[k] for k in ("minx","miny","maxx","maxy")]
+
+    for gridset in settings.GWC_GRIDSETS:
+        gridsetdata = next((gridsetdata  for gridsetdata in getWMSLayerDetailTask.result["gwc"]["gridSubsets"] if gridsetdata["gridSetName"] == gridset),None)
+        if not gridsetdata:
+            continue
+        zoom = settings.TEST_ZOOM
+        zoomStart = gridsetdata.get("zoomStart",0)
+        zoomEnd = gridsetdata.get("zoomEnd",None)
+        if zoom < zoomStart:
+            zoom  = zoomStart
+        if zoomEnd is not None and zoom > zoomEnd:
+            zoom = zoomEnd
+
+        yield TestWMTSService4WMSLayer(
+            getWMSLayerDetailTask.workspace,
+            getWMSLayerDetailTask.wmsstore,
+            getWMSLayerDetailTask.layername,
+            layer_bbox,
+            None,
+            post_actions_factory=getWMSLayerDetailTask.post_actions_factory,
+            gridset=gridset,
+            zoom=zoom
+        )
+
+def createtasks_TestWMSService4Layergroup(getLayergroupDetailTask,limit = 0):
+    """
+    a generator to return TestWMSService4FeatureType tasks
+    """
+    if not getLayergroupDetailTask.result:
+        return
+    #get the intersection between layer_box and settings.MAX_BBOX
+    layer_bbox = getLayergroupDetailTask.result.get("bounds")
+    if not layer_bbox or any(layer_bbox.get(k) is None for k in ("minx","miny","maxx","maxy")):
+        return
+
+    layer_bbox = [layer_bbox[k] for k in ("minx","miny","maxx","maxy")]
+
+    yield TestWMSService4Layergroup(
+        getLayergroupDetailTask.workspace,
+        getLayergroupDetailTask.layergroup,
+        layer_bbox,
+        None,
+        zoom = settings.TEST_ZOOM,
+        post_actions_factory=getLayergroupDetailTask.post_actions_factory)
+
+def createtasks_TestWMTSService4Layergroup(getLayergroupDetailTask,limit = 0):
+    """
+    a generator to return TestWMSService4FeatureType tasks
+    """
+    if not getLayergroupDetailTask.result:
+        return
+    if not getLayergroupDetailTask.result.get("gwc"):
+        return
+    #get the intersection between layer_box and settings.MAX_BBOX
+    layer_bbox = getLayergroupDetailTask.result.get("bounds")
+    if not layer_bbox or any(layer_bbox.get(k) is None for k in ("minx","miny","maxx","maxy")):
+        return
+    
+    layer_bbox = [layer_bbox[k] for k in ("minx","miny","maxx","maxy")]
+
+    for gridset in settings.GWC_GRIDSETS:
+        gridsetdata = next((gridsetdata  for gridsetdata in getLayergroupDetailTask.result["gwc"]["gridSubsets"] if gridsetdata["gridSetName"] == gridset),None)
+        if not gridsetdata:
+            continue
+        zoom = settings.TEST_ZOOM
+        zoomStart = gridsetdata.get("zoomStart",0)
+        zoomEnd = gridsetdata.get("zoomEnd",None)
+        if zoom < zoomStart:
+            zoom  = zoomStart
+        if zoomEnd is not None and zoom > zoomEnd:
+            zoom = zoomEnd
+
+        yield TestWMTSService4Layergroup(
+            getLayergroupDetailTask.workspace,
+            getLayergroupDetailTask.layergroup,
+            layer_bbox,
+            None,
+            post_actions_factory=getLayergroupDetailTask.post_actions_factory,
+            gridset=gridset,
+            zoom=zoom
         )
 

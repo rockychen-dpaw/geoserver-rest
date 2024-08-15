@@ -1,7 +1,33 @@
 import json
+import logging
+import os
 
 from .base import Task
 from .. import timezone
+from .. import settings
+from .wmsstoretasks import ListWMSStores
+from .workspacetasks import ListResourcesInWorkspace
+
+logger = logging.getLogger(__name__)
+
+class WMSGetCapabilitiesTask(Task):
+    category = "Get WMS Capabilities"
+    url = None
+
+    def _format_result(self):
+        return "URL : {}\r\ncapabilities file size = {}".format(self.url or "",self.result)
+
+    def _exec(self,geoserver):
+        self.url = geoserver.wmscapabilities_url()
+        file = geoserver.get_wmscapabilities()
+        try:
+            return os.path.getsize(file)
+        finally:
+            try:
+                os.remove(file)
+            except:
+                logger.error("Failed to delete temporary file '{}'".format(file))
+                pass
 
 class ListWMSLayers(Task):
     """
@@ -18,11 +44,13 @@ class ListWMSLayers(Task):
         return "WMSLayers : {}".format(len(self.result) if self.result else 0) 
 
     def _warnings(self):
-        if not self.result:
-            yield "The WMSstore({}:{}) is empty.".format(self.workspace,self.wmsstore)
+        if not settings.IGNORE_EMPTY_WMSSTORE and not self.result:
+            yield (self.WARNING,"The WMSstore({}:{}) is empty.".format(self.workspace,self.wmsstore))
 
     def _exec(self,geoserver):
-        return geoserver.list_wmslayers(self.workspace,self.wmsstore)
+        result = geoserver.list_wmslayers(self.workspace,self.wmsstore) or []
+        result.sort()
+        return result
         
 class GetWMSLayerDetail(Task):
     """
@@ -57,18 +85,24 @@ class GetWMSLayerDetail(Task):
         
         return result
 
-def createtasks_ListWMSLayers(listWMSstoresTask,limit = 0):
+def createtasks_ListWMSLayers(task,limit = 0):
     """
     a generator to return layernames tasks
     """
-    if not listWMSstoresTask.result:
+    if isinstance(task,ListWMSStores):
+        result = task.result
+    elif isinstance(task,ListResourcesInWorkspace):
+        result = (task.result[1] or []) if task.result else []
+    else:
+        return
+    if not result:
         return
     row = 0
-    for store in listWMSstoresTask.result:
+    for store in result:
         row += 1
         if limit > 0 and row > limit:
             break
-        yield ListWMSLayers(listWMSstoresTask.workspace,store,post_actions_factory=listWMSstoresTask.post_actions_factory)
+        yield ListWMSLayers(task.workspace,store,post_actions_factory=task.post_actions_factory)
 
 
 def createtasks_GetWMSLayerDetail(listWMSLayersTask,limit = 0):
