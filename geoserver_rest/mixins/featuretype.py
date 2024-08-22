@@ -124,13 +124,13 @@ class FeaturetypeMixin(object):
         return "{0}/rest/layers/{1}:{2}".format(self.geoserver_url,workspace,layername)
 
     def featurecount_url(self,workspace,layername):
-        return "{}/wfs?service=wfs&version=2.0.0&request=GetFeature&outputFormat=application%2Fxml&typeNames={}:{}&resultType=hits".format(self.geoserver_url,workspace,layername)
+        return "{}/wfs?service=wfs&version=2.0.0&request=GetFeature&outputFormat=application%2Fxml&typeNames={}%3A{}&resultType=hits".format(self.geoserver_url,workspace,layername)
 
     def features_url(self,workspace,layername,count=5,bbox=None,srs=None):
         """
         bbox: (minx,miny,maxx,maxy) or {"minx":0,"miny":0,"maxx":0,"maxy":0}
         """
-        return "{0}/wfs?service=wfs&version=2.0.0&request=GetFeature&outputFormat=application%2Fjson&typeNames={1}:{2}{3}{4}{5}".format(
+        return "{0}/wfs?service=wfs&version=2.0.0&request=GetFeature&outputFormat=application%2Fjson&typeNames={1}%3A{2}{3}{4}{5}".format(
             self.geoserver_url,
             workspace,
             layername,
@@ -148,7 +148,7 @@ class FeaturetypeMixin(object):
             return "{}/ows?service=WFS&version=1.0.0&request=GetCapabilities".format(self.geoserver_url)
 
     def get_wfscapabilities(self,version="2.0.0",outputfile=None):
-        res = self.get(self.wfscapabilities_url(version=version),headers=self.accept_header("xml"))
+        res = self.get(self.wfscapabilities_url(version=version),headers=self.accept_header("xml"),timeout=settings.GETCAPABILITY_TIMEOUT)
         if outputfile:
             output = open(outputfile,'wb')
         else:

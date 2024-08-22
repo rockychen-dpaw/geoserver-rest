@@ -27,7 +27,7 @@ class WMSServiceMixin(object):
         logger.debug("get map url = {}".format(url))
         res = self.get(url,headers=self.accept_header(format),timeout=settings.WMS_TIMEOUT)
         if res.headers.get("content-type") != format:
-            if res.headers.get("content-type","").startswith("text/"):
+            if any(res.headers.get("content-type","").startswith(t) for t in ("text/","application/")):
                 raise GetMapFailed("Failed to get the map of layer({}:{}).{}".format(workspace,layername,res.text),res)
             else:
                 raise GetMapFailed("Failed to get the map of layer({}:{}).Expect '{}', but got '{}'".format(workspace,layername,format,res.headers.get("content-type","")),res)

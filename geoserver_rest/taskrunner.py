@@ -7,7 +7,8 @@ logger = logging.getLogger(__name__)
 
 class TaskRunner(object):
     endtask = object()
-    def __init__(self,name,geoserver,dop=1):
+    finished_tasks = None
+    def __init__(self,name,geoserver,dop=1,keep_tasks=False):
         """
         timeout: the timeout for getting task from queue
         dop: degree of parallelism
@@ -16,7 +17,8 @@ class TaskRunner(object):
         self.dop = dop
         self.geoserver = geoserver
         self.tasks = queue.Queue()
-        self.finished_tasks = queue.Queue()
+        if keep_tasks:
+            self.finished_tasks = queue.Queue()
         self.workers = None
         self.total_tasks = 0
 
@@ -76,7 +78,8 @@ class TaskWorker(threading.Thread):
                 break
             logger.debug("{0} : Begin to run task {1}({2})".format(self.name,task.category,task.format_parameters(", ")))
             task.run(self.runner.geoserver)
-            self.runner.finished_tasks.put(task)
+            if self.runner.finished_tasks:
+                self.runner.finished_tasks.put(task)
             self.runner.tasks.task_done()
             logger.debug("{0} : {3} to run task {1}({2})".format(self.name,task.category,task.format_parameters(", "),"Succeed" if task.is_succeed else "Failed"))
 

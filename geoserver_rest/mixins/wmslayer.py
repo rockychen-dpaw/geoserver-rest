@@ -3,6 +3,7 @@ import os
 import tempfile
 
 from ..exceptions import *
+from .. import settings
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +85,7 @@ class WMSLayerMixin(object):
             return "{}/ows?service=WMS&version=1.1.1&request=GetCapabilities".format(self.geoserver_url)
 
     def get_wmscapabilities(self,version="1.3.0",outputfile=None):
-        res = self.get(self.wmscapabilities_url(version=version),headers=self.accept_header("xml"))
+        res = self.get(self.wmscapabilities_url(version=version),headers=self.accept_header("xml"),timeout=settings.GETCAPABILITY_TIMEOUT)
         if outputfile:
             output = open(outputfile,'wb')
         else:

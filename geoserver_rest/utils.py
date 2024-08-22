@@ -1,3 +1,5 @@
+import re
+
 def has_samedata(datas1,datas2):
     """
 
@@ -31,3 +33,17 @@ def is_contain(datas,subdatas):
         return False if any(d for d in subdatas if d not  in datas) else True
 
     
+domain_url_re = re.compile("^((?P<protocol>[a-z]+)://)?(?P<domain>[^:/\\?#]+)",re.IGNORECASE)
+def get_domain(url):
+    """
+    Return domain from url
+    """
+    if url:
+        m = domain_url_re.search(url)
+        if m :
+            return m.group('domain')
+        else:
+            return None
+    else:
+        return None
+

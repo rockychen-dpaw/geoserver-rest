@@ -1,8 +1,14 @@
 from datetime import datetime
 import traceback
+import requests
 import json
+import time
+import logging
 
 from .. import timezone
+from .. import settings
+
+logger = logging.getLogger(__name__)
 
 class Task(object):
     WARNING = "Warning"
@@ -62,7 +68,7 @@ class Task(object):
             self.status,
             timezone.format(self.starttime,"%Y-%m-%d %H:%M:%S.%f") if self.starttime else "",
             timezone.format(self.endtime,"%Y-%m-%d %H:%M:%S.%f") if self.endtime else "",
-            (self.endtime - self.starttime).total_seconds() if self.starttime and self.endtime else "",
+            timezone.format_timedelta(self.endtime - self.starttime,ignore_milliseconds=False) if self.starttime and self.endtime else "",
             self.exec_result
         )
 
@@ -75,13 +81,17 @@ class Task(object):
         Report the execute exception and the warnings and errors from task result
         """
         if self.exceptions:
+            msg = "\r\n".join( "{}({})".format(ex.__class__.__name__,str(ex)) if isinstance(ex,requests.RequestException) else "\r\n".join(traceback.format_exception(type(ex),ex    ,ex.__traceback__)) for ex in self.exceptions)
+            if hasattr(self,"url") and getattr(self,"url"):
+                msg = "URL : {}\r\n{}".format(getattr(self,"url"),msg)
+
             yield (self.category,
                 self.format_parameters("\r\n"),
                 self.ERROR,
                 timezone.format(self.starttime,"%Y-%m-%d %H:%M:%S.%f") if self.starttime else "",
                 timezone.format(self.endtime,"%Y-%m-%d %H:%M:%S.%f") if self.endtime else "",
                 (self.endtime - self.starttime).total_seconds() if self.starttime and self.endtime else "",
-                "\r\n".join("{}({})".format(ex.__class__.__name__,str(ex)) for ex in self.exceptions)
+                msg
             )
 
         if self.is_succeed:
@@ -136,9 +146,18 @@ class Task(object):
     def run(self,geoserver):
         self.starttime = timezone.localtime()
         try:
-            self.result = self._exec(geoserver)
+            while True:
+                try:
+                    self.result = self._exec(geoserver)
+                    break
+                except requests.ConnectionError as ex:
+                    if (timezone.localtime() - self.starttime).total_seconds() < settings.GEOSERVER_RESTART_TIMEOUT:
+                        logger.error("The geoserver() is not available.".format(geoserver.geoserver_url))
+                        time.sleep(10)
+                    else:
+                        raise
         except Exception as ex:
-            traceback.print_exc()
+            logger.error(traceback.format_exc())
             self.exceptions = [ex]
             self.result = None
         finally:
@@ -151,7 +170,7 @@ class Task(object):
                     try:
                        action(self)
                     except Exception as ex:
-                        traceback.print_exc()
+                        logger.error("{0} : Failed to execute the post action({1}). {2}".format(self.__class__.__name__,action.__class__.__name__,traceback.format_exc()))
                         if self.exceptions:
                             self.exceptions.append(ex)
                         else:

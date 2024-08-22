@@ -8,11 +8,13 @@ from .. import settings
 logger = logging.getLogger(__name__)
 
 class WMTSGetCapabilitiesTask(Task):
-    category = "Get WMTS Capabilities"
+    category = "Get Capabilities"
+    arguments = ("service",)
+    service = "WMTS"
     url = None
 
     def _format_result(self):
-        return "URL : {}\r\ncapabilities file size = {}".format(self.url or "",self.result)
+        return "URL : {}\r\nCapabilities File Size = {}".format(self.url or "",self.result)
 
     def _exec(self,geoserver):
         self.url = geoserver.wmtscapabilities_url()
@@ -49,8 +51,11 @@ class TestWMTSService(Task):
         self.zoom = zoom
         self.gridset = gridset
         self.gridsetdata = None
-
         self.layer_bbox = layer_bbox
+
+        for i in range(len(self.layer_bbox)):
+            self.layer_bbox[i] = float(self.layer_bbox[i])
+
         if self.layer_bbox[0] < settings.MAX_BBOX[0]:
             self.layer_bbox[0] = settings.MAX_BBOX[0]
         if self.layer_bbox[1] < settings.MAX_BBOX[1]:
@@ -226,6 +231,8 @@ def createtasks_TestWMSService4FeatureType(getFeatureTypeDetailTask,limit = 0):
     """
     a generator to return TestWMSService4FeatureType tasks
     """
+    if not getFeatureTypeDetailTask.featuredetail["geometry"]:
+        return
     if not getFeatureTypeDetailTask.result:
         return
     #get the intersection between layer_box and settings.MAX_BBOX
@@ -261,6 +268,8 @@ def createtasks_TestWMTSService4FeatureType(getFeatureTypeDetailTask,limit = 0):
     """
     a generator to return TestWMSService4FeatureType tasks
     """
+    if not getFeatureTypeDetailTask.featuredetail["geometry"]:
+        return
     if not getFeatureTypeDetailTask.result:
         return
     if not getFeatureTypeDetailTask.result.get("gwc"):
@@ -474,4 +483,15 @@ def createtasks_TestWMTSService4Layergroup(getLayergroupDetailTask,limit = 0):
             gridset=gridset,
             zoom=zoom
         )
+
+def createtasks_WMTSGetCapabilities(task,limit = 0):
+    """
+    a generator to return WMTSSGetCapabilitiesTask
+    """
+    if not task.is_succeed:
+        return
+    yield WMTSGetCapabilitiesTask(
+        post_actions_factory=task.post_actions_factory
+    )
+
 

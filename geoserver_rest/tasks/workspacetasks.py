@@ -50,6 +50,14 @@ class ListResourcesInWorkspace(Task):
         )
 
         
+def createtasks_ListWorkspaces(task,limit = 0):
+    """
+    a generator to return list datastore tasks
+    """
+    if not task.is_succeed:
+        return
+    yield ListWorkspaces(post_actions_factory=task.post_actions_factory)
+
 def createtasks_ListResourcesInWorkspace(listWorkspacesTask,limit = 0):
     """
     a generator to return list datastore tasks

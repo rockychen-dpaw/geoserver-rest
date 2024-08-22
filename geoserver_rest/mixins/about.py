@@ -20,6 +20,9 @@ class AboutMixin(object):
                     data[d["@name"].lower()] = [int(i) for i in d["Version"].split(".")]
 
             self.VERSIONS[self.geoserver_url] = data
-                
-        return self.VERSIONS[self.geoserver_url].get(component.lower()) or None
+ 
+        if component:
+            return self.VERSIONS[self.geoserver_url].get(component.lower()) or None
+        else:
+            return self.VERSIONS[self.geoserver_url]
     

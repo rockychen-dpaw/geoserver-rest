@@ -10,10 +10,12 @@ from .workspacetasks import ListResourcesInWorkspace
 logger = logging.getLogger(__name__)
 
 class WFSGetCapabilitiesTask(Task):
-    category = "Get WFS Capabilities"
+    category = "Get Capabilities"
+    arguments = ("service",)
+    service = "WFS"
     url = None
     def _format_result(self):
-        return "URL : {}\r\ncapabilities file size = {}".format(self.url or "",self.result)
+        return "URL : {}\r\nCapabilities File Size = {}".format(self.url or "",self.result)
 
     def _exec(self,geoserver):
         self.url = geoserver.wfscapabilities_url()
@@ -88,7 +90,7 @@ class GetFeatureTypeDetail(Task):
         return json.dumps(self.result,indent=4) if self.result else "{}"
 
     def _exec(self,geoserver):
-        result = {}
+        result = {"geometry":None}
         #get the feature details
         detail = geoserver.get_featuretype(self.workspace,self.featuretype)
         for k in ["nativeName","title","abstract","srs","nativeBoundingBox","latLonBoundingBox","enabled","attributes"]:
@@ -99,7 +101,12 @@ class GetFeatureTypeDetail(Task):
                 for attr in detail[k]["attribute"]:
                     result[k].append({})
                     for n in ["name","nillable","binding"]:
+                        if n == "binding":
+                            if attr[n].startswith("org.locationtech.jts.geom."):
+                                result["geometry"] = attr[n].rsplit(".",1)[1]
+
                         result[k][-1][n] = attr[n]
+
                 continue
             result[k] = detail[k]
         #get the feature styles
@@ -172,21 +179,34 @@ class GetFeatures(Task):
             )
 
     def _exec(self,geoserver):
-        self.url = geoserver.features_url(
-            self.workspace,
-            self.featuretype,
-            count=self.count,
-            srs=self.srs,
-            bbox=self.bbox
-        )
-        return geoserver.get_features(
-            self.workspace,
-            self.featuretype,
-            storename=self.datastore,
-            count=self.count,
-            srs=self.srs,
-            bbox=self.bbox
-        )
+        if self.featuredetail["geometry"]:
+            self.url = geoserver.features_url(
+                self.workspace,
+                self.featuretype,
+                count=self.count,
+                srs=self.srs,
+                bbox=self.bbox
+            )
+            return geoserver.get_features(
+                self.workspace,
+                self.featuretype,
+                storename=self.datastore,
+                count=self.count,
+                srs=self.srs,
+                bbox=self.bbox
+            )
+        else:
+            self.url = geoserver.features_url(
+                self.workspace,
+                self.featuretype,
+                count=self.count
+            )
+            return geoserver.get_features(
+                self.workspace,
+                self.featuretype,
+                storename=self.datastore,
+                count=self.count
+            )
 
 def createtasks_ListFeatureTypes(task,limit = 0):
     """
@@ -253,6 +273,17 @@ def createtasks_GetFeatures(getFeatureTypeDetailTask,limit = 0):
         getFeatureTypeDetailTask.featuretype,
         getFeatureTypeDetailTask.result,
         post_actions_factory=getFeatureTypeDetailTask.post_actions_factory
+    )
+
+
+def createtasks_WFSGetCapabilities(task,limit = 0):
+    """
+    a generator to return WFSGetCapabilitiesTask
+    """
+    if not task.is_succeed:
+        return
+    yield WFSGetCapabilitiesTask(
+        post_actions_factory=task.post_actions_factory
     )
 
 

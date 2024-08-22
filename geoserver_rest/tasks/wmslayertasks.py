@@ -11,11 +11,13 @@ from .workspacetasks import ListResourcesInWorkspace
 logger = logging.getLogger(__name__)
 
 class WMSGetCapabilitiesTask(Task):
-    category = "Get WMS Capabilities"
+    category = "Get Capabilities"
+    arguments = ("service",)
+    service = "WMS"
     url = None
 
     def _format_result(self):
-        return "URL : {}\r\ncapabilities file size = {}".format(self.url or "",self.result)
+        return "URL : {}\r\nCapabilities File Size = {}".format(self.url or "",self.result)
 
     def _exec(self,geoserver):
         self.url = geoserver.wmscapabilities_url()
@@ -117,4 +119,15 @@ def createtasks_GetWMSLayerDetail(listWMSLayersTask,limit = 0):
         if limit > 0 and row > limit:
             break
         yield GetWMSLayerDetail(listWMSLayersTask.workspace,listWMSLayersTask.wmsstore,layername,post_actions_factory=listWMSLayersTask.post_actions_factory)
+
+def createtasks_WMSGetCapabilities(task,limit = 0):
+    """
+    a generator to return WMSGetCapabilitiesTask
+    """
+    if not task.is_succeed:
+        return
+    yield WMSGetCapabilitiesTask(
+        post_actions_factory=task.post_actions_factory
+    )
+
 

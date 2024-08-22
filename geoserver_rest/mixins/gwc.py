@@ -221,7 +221,7 @@ class GWCMixin(object):
         return "{}/gwc/service/wmts?service=WMTS&version=1.1.1&request=GetCapabilities".format(self.geoserver_url)
 
     def get_wmtscapabilities(self,version="1.1.1",outputfile=None):
-        res = self.get(self.wmtscapabilities_url(version=version),headers=self.accept_header("xml"))
+        res = self.get(self.wmtscapabilities_url(version=version),headers=self.accept_header("xml"),timeout=settings.GETCAPABILITY_TIMEOUT)
         if outputfile:
             output = open(outputfile,'wb')
         else:
@@ -374,7 +374,7 @@ class GWCMixin(object):
         logger.debug("Tile url={}".format(url))
         res = self.get(url,headers=self.accept_header("jpeg"),error_handler=self._handle_gwcresponse_error,timeout=settings.WMTS_TIMEOUT)
         if res.headers.get("content-type") != format:
-            if res.headers.get("content-type","").startswith("text/"):
+            if any(res.headers.get("content-type","").startswith(t) for t in ("text/","application/")):
                 raise GetMapFailed("Failed to get the map of layer({}:{}).{}".format(workspace,layername,res.text))
             else:
                 raise GetMapFailed("Failed to get the map of layer({}:{}).Expect '{}', but got '{}'".format(workspace,layername,format,res.headers.get("content-type","")))

@@ -1,0 +1,69 @@
+<html>
+<head>
+    <title>The reports for geoserver {{geoserver}}</title>
+    <style>
+    table {
+    	border-collapse: collapse;
+        font-family: Tahoma, Geneva, sans-serif;
+    }
+    table td {
+    	padding: 15px;
+    }
+    table thead th {
+    	background-color: #54585d;
+    	color: #ffffff;
+    	font-weight: bold;
+    	font-size: 13px;
+    	border: 1px solid #54585d;
+    }
+    table tbody td {
+    	color: #636363;
+    	border: 1px solid #dddfe1;
+    }
+    table tbody tr {
+    	background-color: #f9fafb;
+    }
+    table tbody tr:nth-child(odd) {
+    	background-color: #ffffff;
+    }
+    table caption {
+      font-weight: bold;
+      font-size: 16px;
+      color: #636363;
+      margin: 20px;
+     }
+    </style>
+</head>
+<body>
+    <table>
+       <caption>Healthcheck Reports for {{geoserver_name}} ({{geoserver_url}})</caption>
+       <thead>
+        <tr>
+            <th>Start Time</th>
+            <th>End Time</th>
+            <th>Execute Time</th>
+            <th>Total Tasks</th>
+            <th>Warnings</th>
+            <th>Errors</th>
+            <th>Reports</th>
+        </tr>
+       </thead>
+        {% for report in reports %}
+        <tr>
+            <td>{{report.starttime}}</td>
+            <td>{{report.endtime}}</td>
+            <td>{{report.exectime}}</td>
+            <td>{{report.total_tasks}}</td>
+            <td>{{report.warnings}}</td>
+            <td>{{report.errors}}</td>
+            <td>
+                <A href="./{{report.report_dir}}/{{report.report_file}}">Report</A> 
+                {% if report.errors > 0 or report.warnings > 0%}
+                | <A href="./{{report.report_dir}}/{{report.warnings_file}}">Warnings & Errors</A>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>

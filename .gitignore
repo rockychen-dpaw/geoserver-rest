@@ -4,4 +4,6 @@
 .python-version
 *.csv
 *.log
+build_image.sh
+reports
 
