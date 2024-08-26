@@ -17,7 +17,7 @@ class CheckGeoserverAlive(Task):
         super().__init__(post_actions_factory = post_actions_factory)
 
     def _format_result(self):
-        return "Geoserver is alive.\r\n{}".format(json.dumps(self.result,indent=4) if self.result else "")
+        return "Geoserver is alive.\r\n{}".format( "\r\n".join("{}={}".format(k,".".join(str(d) for d in v)) for k,v in self.result.items()) if self.result else "")
 
     def _exec(self,geoserver):
         return geoserver.get_version(None)

@@ -374,8 +374,13 @@ class GWCMixin(object):
         logger.debug("Tile url={}".format(url))
         res = self.get(url,headers=self.accept_header("jpeg"),error_handler=self._handle_gwcresponse_error,timeout=settings.WMTS_TIMEOUT)
         if res.headers.get("content-type") != format:
-            if any(res.headers.get("content-type","").startswith(t) for t in ("text/","application/")):
-                raise GetMapFailed("Failed to get the map of layer({}:{}).{}".format(workspace,layername,res.text))
+            if any( t in res.headers.get("content-type","") for t in ("text/","xml","css","json","javascript")):
+                try:
+                    msg = res.text
+                except:
+                    raise GetMapFailed("Failed to get the map of layer({}:{}).Expect '{}', but got '{}'".format(workspace,layername,format,res.headers.get("content-type","")))
+
+                raise GetMapFailed("Failed to get the map of layer({}:{}).{}".format(workspace,layername,msg))
             else:
                 raise GetMapFailed("Failed to get the map of layer({}:{}).Expect '{}', but got '{}'".format(workspace,layername,format,res.headers.get("content-type","")))
         if outputfile:
