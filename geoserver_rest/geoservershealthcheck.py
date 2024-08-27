@@ -1,13 +1,21 @@
 import os
 import logging
 import traceback
+import jinja2
 
+from . import timezone
 from . import settings
 from . import utils
 from . import loggingconfig
 from .geoserverhealthcheck import GeoserverHealthCheck
+from .mail import EmailMessage
 
 logger = logging.getLogger("geoserver_rest.geoservershealthcheck")
+
+jinja_env = jinja2.Environment(
+    loader=jinja2.FileSystemLoader([settings.BASE_DIR]),
+    autoescape=jinja2.select_autoescape()
+)
 
 class GeoserversHealthCheck(object):
     
@@ -18,12 +26,36 @@ class GeoserversHealthCheck(object):
         for healthcheck in self.healthchecks:
             healthcheck.start()
 
-    def wait_to_finish(self):
+    @property
+    def tasks(self):
+        tasks = 0
         for healthcheck in self.healthchecks:
-            try:
-                healthcheck.wait_to_finish()
-            except:
-                logger.error(traceback.format_exc())
+            tasks += healthcheck.tasks or 0
+
+        return tasks
+
+    @property
+    def warnings(self):
+        warnings = 0
+        for healthcheck in self.healthchecks:
+            warnings += healthcheck.warnings or 0
+
+        return warnings
+        
+    @property
+    def errors(self):
+        errors = 0
+        for healthcheck in self.healthchecks:
+            errors += healthcheck.errors or 0
+
+        return errors
+
+    def wait_to_finish(self):
+        processing_metadatas = []
+        for healthcheck in self.healthchecks:
+            processing_metadatas.append({"healthcheck":healthcheck,"processing_metadata":healthcheck.wait_to_finish()})
+
+        return processing_metadatas
 
 
 if __name__ == '__main__':
@@ -48,6 +80,19 @@ if __name__ == '__main__':
 
     healthcheck = GeoserversHealthCheck(geoservers,settings.REQUEST_HEADERS,settings.HEALTHCHECK_DOP)
     healthcheck.start()
-    healthcheck.wait_to_finish()
+    processing_metadatas = healthcheck.wait_to_finish()
 
+    if settings.EMAIL_ENABLED and (any(metadata.get("exceptions") for metadata in processing_metadatas) or healthcheck.errors):
+        #send email
+        subject = "Some errors found on geoserver({})".format(",".join(gs[0] for gs in geoservers))
+        context = {"healthchecks":processing_metadatas}
+        #generate the email body
+        body_template = jinja_env.get_template("notify_email.html")
+        body = body_template.render(context)
+        email = EmailMessage(subject=subject,body=body,from_email=settings.EMAIL_FROM,to=settings.EMAIL_TO,cc=settings.EMAIL_CC,bcc=settings.EMAIL_BCC)
+        email.content_subtype = 'html'
+        for hc in healthcheck.healthchecks:
+            if hc.errors:
+                email.attach_file(os.path.join(hc.report_dir, hc.warnings_file))
+        email.send()
 

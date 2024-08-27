@@ -3,6 +3,28 @@ import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 DEBUG = os.environ.get("DEBUG","false").lower() == "true"
+DEFAULT_CHARSET = "utf-8"
+
+EMAIL_USE_LOCALTIME=True
+
+EMAIL_HOST = os.environ.get("EMAIL_HOST")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS","false").lower() == "true"
+EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL","false").lower() == "true"
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", 587 if EMAIL_USE_TLS else (465 if EMAIL_USE_SSL else 25)))
+EMAIL_SSL_CERTFILE = os.environ.get("EMAIL_SSL_CERTFILE")
+EMAIL_SSL_KEYFILE = os.environ.get("EMAIL_SSL_KEYFILE")
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER") or ""
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD") or ""
+EMAIL_TIMEOUT = os.environ.get("EMAIL_TIMEOUT")
+EMAIL_TIMEOUT = int(EMAIL_TIMEOUT) if EMAIL_TIMEOUT is not None else None
+EMAIL_FROM = os.environ.get("EMAIL_FROM","noreply@dbca.wa.gov.au")
+EMAIL_TO = os.environ.get("EMAIL_TO")
+EMAIL_TO = [e.strip() for e in EMAIL_TO.split(",") if e.strip()] if EMAIL_TO else None
+EMAIL_CC = os.environ.get("EMAIL_CC")
+EMAIL_CC = [e.strip() for e in EMAIL_CC.split(",") if e.strip()] if EMAIL_CC else None
+EMAIL_BCC = os.environ.get("EMAIL_BCC")
+EMAIL_BCC = [e.strip() for e in EMAIL_BCC.split(",") if e.strip()] if EMAIL_BCC else None
+EMAIL_ENABLED = True if (EMAIL_HOST and (EMAIL_TO or EMAIL_CC or EMAIL_BCC)) else False
 
 MAX_BBOX = [108,-45,155,-10]
 GWC_GRIDSETS = os.environ.get("GWC_GRIDSETS","gda94").split(",")

@@ -48,22 +48,39 @@
             <th>Reports</th>
         </tr>
        </thead>
-        {% for report in reports %}
+        {%- for report in reports %}
         <tr>
+            {%- if report.exceptions %}
+            <td rowspan="2" >{{report.starttime}}</td>
+            <td rowspan="2" >{{report.endtime}}</td>
+            <td rowspan="2" >{{report.exectime}}</td>
+            {%- else %}
             <td>{{report.starttime}}</td>
             <td>{{report.endtime}}</td>
             <td>{{report.exectime}}</td>
+            {%- endif %}
             <td>{{report.total_tasks}}</td>
             <td>{{report.warnings}}</td>
             <td>{{report.errors}}</td>
+            {%- if report.exceptions %}
+            <td rowspan="2">
+            {%- else %}
             <td>
+            {%- endif %}
+            {%- if report.report_file != "-" %}
                 <A href="./{{report.report_dir}}/{{report.report_file}}">Report</A> 
-                {% if report.errors > 0 or report.warnings > 0%}
+                {%- if report.errors > 0 or report.warnings > 0%}
                 | <A href="./{{report.report_dir}}/{{report.warnings_file}}">Warnings & Errors</A>
-                {% endif %}
+                {%- endif %}
+            {%- endif %}
             </td>
         </tr>
-        {% endfor %}
+        {%- if report.exceptions %}
+        <tr>
+            <td colspan="3" ><pre>{{report.exceptions}}</pre></td>
+        </tr>
+        {%- endif %}
+        {%- endfor %}
     </table>
 </body>
 </html>

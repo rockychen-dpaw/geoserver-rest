@@ -13,6 +13,7 @@ from . import settings
 from . import timezone
 from . import loggingconfig
 from . import utils
+from .mail import EmailMessage
 
 logger = logging.getLogger("geoserver_rest.geoserverhealthcheck")
 
@@ -24,6 +25,8 @@ jinja_env = jinja2.Environment(
 class GeoserverHealthCheck(object):
     report_file = None
     warnings_file = None
+    reportwriter = None
+    warningwriter = None
     
     def __init__(self,geoserver_name,geoserver_url,geoserver_user,geoserver_password,requestheaders=None,dop=1):
         self.geoserver_name = geoserver_name
@@ -82,22 +85,22 @@ class GeoserverHealthCheck(object):
 
     def write_report_action_factory(self,basetask):
         self.report_file = "{}_{}_report.csv".format(self.geoserver_name,timezone.format(self.starttime,pattern="%Y-%m-%dT%H-%M-%S"))
-        reportwriter = CSVWriter(os.path.join(self.report_dir,self.report_file),header=basetask.reportheader)
+        self.reportwriter = CSVWriter(os.path.join(self.report_dir,self.report_file),header=basetask.reportheader)
         def _func(task):
-            reportwriter.writerows(task.reportrows())
+            self.reportwriter.writerows(task.reportrows())
 
         return self.synced_taskaction(_func)
         
     def write_warning_action_factory(self,basetask):
         self.warnings_file = "{}_{}_warnings.csv".format(self.geoserver_name,timezone.format(self.starttime,pattern="%Y-%m-%dT%H-%M-%S"))
-        warningwriter = CSVWriter(os.path.join(self.report_dir,self.warnings_file),header=basetask.warningheader)
+        self.warningwriter = CSVWriter(os.path.join(self.report_dir,self.warnings_file),header=basetask.warningheader)
         def _func(task):
             for warning in task.warnings():
                 if warning[2] == "Warning":
                     self.warnings += 1
                 else:
                     self.errors += 1
-                warningwriter.writerow(warning)
+                self.warningwriter.writerow(warning)
         
         return self.synced_taskaction(_func)
 
@@ -261,67 +264,94 @@ class GeoserverHealthCheck(object):
 
 
     def wait_to_finish(self):
-        self.taskrunner.wait_to_shutdown()
+        """
+        return the processing metadata
+        """
+        exceptions = []
+        try:
+            self.taskrunner.wait_to_shutdown()
+            self.reportwriter.close()
+            self.reportwriter = None
+            self.warningwriter.close()
+            self.warningwriter = None
+        except Exception as ex:
+            exceptions.append(ex)
+
         self.endtime = timezone.localtime()
         metadata = {
             "starttime": timezone.format(self.starttime,pattern="%Y-%m-%d %H:%M:%S.%f"),
             "endtime": timezone.format(self.endtime,pattern="%Y-%m-%d %H:%M:%S.%f"),
             "exectime": timezone.format_timedelta(self.endtime - self.starttime),
-            "total_tasks": self.tasks,
-            "warnings": self.warnings,
-            "errors": self.errors,
-            "report_dir": os.path.basename(self.report_dir),
-            "report_file":self.report_file,
-            "warnings_file":self.warnings_file,
+            "total_tasks": self.tasks if self.tasks is not None else "-",
+            "warnings": self.warnings if self.warnings is not None else "-",
+            "errors": self.errors if self.errors is not None else "-",
+            "report_dir": os.path.basename(self.report_dir) if self.report_dir else "-",
+            "report_file":self.report_file if self.report_file else "-",
+            "warnings_file":self.warnings_file if self.warnings_file else "-",
         }
-        with open(os.path.join(self.report_dir,"reportmeta.json"),'w') as f:
-            f.write(json.dumps(metadata,indent=4))
+        if exceptions:
+            metadata["exceptions"] = "\r\n----------------------------------------------------\r\n".join(
+                "\r\n".join(traceback.format_exception(type(ex),ex,ex.__traceback__)) for ex in exceptions
+            )
 
-        if os.path.exists(os.path.join(settings.BASE_DIR,"reports.html")):
-            #write the reports.html
-            reports = []
-            for f in os.listdir(self.reports_home):
-                if not os.path.isdir(os.path.join(self.reports_home,f)):
-                    #not a report folder
-                    continue
+        try:
+            with open(os.path.join(self.report_dir,"reportmeta.json"),'w') as f:
+                f.write(json.dumps(metadata,indent=4))
+    
+            if os.path.exists(os.path.join(settings.BASE_DIR,"reports.html")):
+                #write the reports.html
+                reports = []
+                for f in os.listdir(self.reports_home):
+                    if not os.path.isdir(os.path.join(self.reports_home,f)):
+                        #not a report folder
+                        continue
+    
+                    if not os.path.exists(os.path.join(self.reports_home,f,"reportmeta.json")):
+                        #meta file doesn't exist
+                        continue
+                    with open(os.path.join(self.reports_home,f,"reportmeta.json"),'rt') as f:
+                        try:
+                            reports.append(json.loads(f.read()))
+                        except :
+                            logger.error("Failed to load report meta data.{}".format(traceback.format_exc()))
+    
+                #sort the reports
+                reports.sort(key=lambda d:d["starttime"],reverse=True)
+                #remove the expired reports
+                if len(reports) > settings.MAX_REPORTS:
+                    for i in range(len(reports) - settings.MAX_REPORTS):
+                        try:
+                            shutil.rmtree(os.path.join(self.reports_home,reports[-1]["report_dir"]))
+                        except:
+                            logger.error("Failed to delete expired report folder({}).{}".format(reports[-1]["report_dir"],traceback.format_exc()))
+                        del reports[-1]
+                #generate the reports.html
+                reports_template = jinja_env.get_template("reports.html")
+                with open(os.path.join(self.reports_home,"reports.html"),"w") as f:
+                    f.write(reports_template.render({
+                        "geoserver_name" : self.geoserver_name,
+                        "geoserver_url" : self.geoserver.geoserver_url,
+                        "reports":reports
+                    }))
+    
+            logger.warning("Geoserver : {}, Start Time : {}, End Time : {}, Spent : {} , Tasks : {} ,  Warnings : {} , Errors : {}".format(
+                self.geoserver_name,
+                timezone.format(self.starttime,pattern="%Y-%m-%d %H:%M:%S.%f"),
+                timezone.format(self.endtime,pattern="%Y-%m-%d %H:%M:%S.%f"),
+                timezone.format_timedelta(self.endtime - self.starttime),
+                self.tasks,
+                self.warnings,
+                self.errors
+            ))
+        except Exception as ex:
+            exceptions.append(ex)
 
-                if not os.path.exists(os.path.join(self.reports_home,f,"reportmeta.json")):
-                    #meta file doesn't exist
-                    continue
-                with open(os.path.join(self.reports_home,f,"reportmeta.json"),'rt') as f:
-                    try:
-                        reports.append(json.loads(f.read()))
-                    except :
-                        logger.error("Failed to load report meta data.{}".format(traceback.format_exc()))
+        if exceptions:
+            metadata["exceptions"] = "\r\n----------------------------------------------------\r\n".join(
+                "\r\n".join(traceback.format_exception(type(ex),ex,ex.__traceback__)) for ex in exceptions
+            )
 
-            #sort the reports
-            reports.sort(key=lambda d:d["starttime"],reverse=True)
-            #remove the expired reports
-            if len(reports) > settings.MAX_REPORTS:
-                for i in range(len(reports) - settings.MAX_REPORTS):
-                    try:
-                        shutil.rmtree(os.path.join(self.reports_home,reports[-1]["report_dir"]))
-                    except:
-                        logger.error("Failed to delete expired report folder({}).{}".format(reports[-1]["report_dir"],traceback.format_exc()))
-                    del reports[-1]
-            #generate the reports.html
-            reports_template = jinja_env.get_template("reports.html")
-            with open(os.path.join(self.reports_home,"reports.html"),"w") as f:
-                f.write(reports_template.render({
-                    "geoserver_name" : self.geoserver_name,
-                    "geoserver_url" : self.geoserver.geoserver_url,
-                    "reports":reports
-                }))
-
-        logger.warning("Geoserver : {}, Start Time : {}, End Time : {}, Spent : {} , Tasks : {} ,  Warnings : {} , Errors : {}".format(
-            self.geoserver_name,
-            timezone.format(self.starttime,pattern="%Y-%m-%d %H:%M:%S.%f"),
-            timezone.format(self.endtime,pattern="%Y-%m-%d %H:%M:%S.%f"),
-            timezone.format_timedelta(self.endtime - self.starttime),
-            self.tasks,
-            self.warnings,
-            self.errors
-        ))
+        return metadata
 
 
 
@@ -335,6 +365,17 @@ if __name__ == '__main__':
 
     healthcheck = GeoserverHealthCheck(geoserver_name,geoserver_url,geoserver_user,geoserver_password,settings.REQUEST_HEADERS,settings.HEALTHCHECK_DOP)
     healthcheck.start()
-    healthcheck.wait_to_finish()
+    processing_metadata = healthcheck.wait_to_finish()
+    if settings.EMAIL_ENABLED and (processing_metadata.get("exceptions") or healthcheck.errors):
+        #send email
+        subject = "Some errors found on geoserver({})".format(geoserver_name)
+        context = {"healthchecks":[{"healthcheck":healthcheck,"processing_metadata":processing_metadata}]}
+        #generate the email body
+        body_template = jinja_env.get_template("notify_email.html")
+        body = body_template.render(context)
+        email = EmailMessage(subject=subject,body=body,from_email=settings.EMAIL_FROM,to=settings.EMAIL_TO,cc=settings.EMAIL_CC,bcc=settings.EMAIL_BCC)
+        email.content_subtype = 'html'
+        email.attach_file(os.path.join(healthcheck.report_dir, healthcheck.warnings_file))
+        email.send()
 
 
