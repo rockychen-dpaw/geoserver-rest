@@ -25,7 +25,7 @@ COPY poetry.lock pyproject.toml ./
 RUN poetry config virtualenvs.create false \
   && poetry install --only main --no-interaction --no-ansi
 
-COPY reports.html ./
+COPY reports.html notify_email.html ./
 COPY geoserver_rest ./geoserver_rest
 
 RUN echo "#!/bin/bash \n\

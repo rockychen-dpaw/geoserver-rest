@@ -375,9 +375,9 @@ def createtasks_TestWMSService4WMSLayer(getWMSLayerDetailTask,limit = 0):
     #get the intersection between layer_box and settings.MAX_BBOX
     layer_bbox = getWMSLayerDetailTask.result.get("latLonBoundingBox")
     if not layer_bbox or any(layer_bbox.get(k) is None for k in ("minx","miny","maxx","maxy")):
-        return
-
-    layer_bbox = [layer_bbox[k] for k in ("minx","miny","maxx","maxy")]
+        layer_bbox = settings.MAX_BBOX
+    else:
+        layer_bbox = [layer_bbox[k] for k in ("minx","miny","maxx","maxy")]
 
     yield TestWMSService4WMSLayer(
         getWMSLayerDetailTask.workspace,
