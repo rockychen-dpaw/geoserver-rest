@@ -69,8 +69,7 @@ class GeoserverUtils(object):
         elif res.status_code == 404:
             raise ResourceNotFound(
                 """URL: {0}
-{1}: Resource Not Found
-""".format(res.request.url,res.status_code),
+{1}: Resource Not Found""".format(res.request.url,res.status_code),
                 response=res
             )
         elif res.status_code >= 400:
