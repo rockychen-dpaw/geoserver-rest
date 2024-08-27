@@ -61,12 +61,26 @@ class GeoserverUtils(object):
 
     def _handle_response_error(self,res):
         if res.status_code >= 300 and res.status_code < 400:
-            raise UnauthorizedException(response=res)
+            raise UnauthorizedException(
+                """URL: {0}
+{1}: No permission to access this resource.""".format(res.request.url,res.status_code),
+                response=res
+            )
         elif res.status_code == 404:
-            raise ResourceNotFound(response=res)
+            raise ResourceNotFound(
+                """URL: {0}
+{1}: Resource Not Found
+""".format(res.request.url,res.status_code),
+                response=res
+            )
         elif res.status_code >= 400:
-            res.raise_for_status()
-
+            try:
+                res.raise_for_status()
+            except Exception as ex:
+                msg = """URL: {0}
+{1}
+{2}""".format(res.request.url,str(ex),res.text)
+                raise ex.__class__(msg,response=res)
 
 class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMixin,LayergroupMixin,ReloadMixin,SecurityMixin,StyleMixin,WMSLayerMixin,WMSStoreMixin,WorkspaceMixin,UsergroupMixin,GeoserverUtils):
     def __init__(self,geoserver_url,username,password,headers=None):

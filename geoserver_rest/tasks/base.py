@@ -82,8 +82,12 @@ class Task(object):
         """
         if self.exceptions:
             msg = "\r\n".join( "{}({})".format(ex.__class__.__name__,str(ex)) if isinstance(ex,requests.RequestException) else "\r\n".join(traceback.format_exception(type(ex),ex    ,ex.__traceback__)) for ex in self.exceptions)
-            if hasattr(self,"url") and getattr(self,"url"):
-                msg = "URL : {}\r\n{}".format(getattr(self,"url"),msg)
+            try:
+                url = self.url
+            except:
+                url = None
+            if url and url not in msg:
+                msg = "URL: {}\r\n{}".format(url,msg)
 
             yield (self.category,
                 self.format_parameters("\r\n"),

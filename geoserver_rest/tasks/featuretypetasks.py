@@ -98,7 +98,7 @@ class GetFeatureTypeDetail(Task):
                 continue
             if k == "attributes":
                 result[k] = []
-                for attr in detail[k]["attribute"]:
+                for attr in detail[k].get("attribute") or []:
                     result[k].append({})
                     for n in ["name","nillable","binding"]:
                         if n == "binding":
@@ -119,7 +119,8 @@ class GetFeatureTypeDetail(Task):
         if detail:
             result["gwc"] = {}
             for k in ["expireClients","expireCache","gridSubsets","enabled"]:
-                result["gwc"][k] = detail[k]
+                if k in detail:
+                    result["gwc"][k] = detail[k]
         
         return result
 
