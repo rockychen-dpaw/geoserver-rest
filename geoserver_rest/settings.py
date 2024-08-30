@@ -51,6 +51,16 @@ IGNORE_EMPTY_WORKSPACE = os.environ.get("IGNORE_EMPTY_WORKSPACE","false").lower(
 IGNORE_EMPTY_DATASTORE = os.environ.get("IGNORE_EMPTY_DATASTORE","false").lower() == "true"
 IGNORE_EMPTY_WMSSTORE = os.environ.get("IGNORE_EMPTY_WMSSTORE","false").lower() == "true"
 
+TASK_RETRIES = os.environ.get("TASK_RETRIES")
+if TASK_RETRIES:
+    TASK_RETRIES = [ t.rsplit(":",1) for t in TASK_RETRIES.split(",") if t.strip()]
+    for d in TASK_RETRIES:
+        d[0] = d[0].strip()
+        d[1] = int(d[1].strip())
+    TASK_RETRIES = dict(TASK_RETRIES)
+else:
+    TASK_RETRIES = {}
+
 REPORT_HOME = os.environ.get("REPORT_HOME") or "./reports"
 if os.path.exists(REPORT_HOME):
     if not os.path.isdir(REPORT_HOME):

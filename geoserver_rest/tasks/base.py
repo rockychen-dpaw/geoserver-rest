@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 class Task(object):
     WARNING = "Warning"
     ERROR = "Error"
-    queuetime = None
     starttime = None
     endtime = None
     exceptions = None
@@ -25,7 +24,10 @@ class Task(object):
     post_actions_factory = None
 
     def __init__(self,post_actions_factory = None):
-        self.queuetime = timezone.localtime()
+        self.retries = settings.TASK_RETRIES.get(self.__class__.__name__,1)
+        if self.retries < 1:
+            self.retries = 1
+        logger.debug("{} retry {} times".format(self.__class__.__name__,self.retries))
         if post_actions_factory:
             self.post_actions_factory = post_actions_factory
 
@@ -150,6 +152,7 @@ class Task(object):
     def run(self,geoserver):
         self.starttime = timezone.localtime()
         try:
+            retry = 0
             while True:
                 try:
                     self.result = self._exec(geoserver)
@@ -159,7 +162,11 @@ class Task(object):
                         logger.error("The geoserver() is not available.".format(geoserver.geoserver_url))
                         time.sleep(10)
                     else:
-                        raise
+                        retry += 1
+                        if retry < self.retries:
+                            time.sleep(5)
+                        else:
+                            raise
         except Exception as ex:
             logger.error(traceback.format_exc())
             self.exceptions = [ex]
