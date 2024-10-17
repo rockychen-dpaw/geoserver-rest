@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 class WMTSGetCapabilitiesTask(Task):
     category = "Get Capabilities"
     arguments = ("service",)
+    keyarguments = ("service",)
     service = "WMTS"
     url = None
 
@@ -181,6 +182,7 @@ class TestWMTSService4FeatureType(TestWMTSService):
     Test the wms service of the feature type
     """
     arguments = ("workspace","datastore","featuretype","gridset","zoom","row","column","style","format")
+    keyarguments = ("workspace","datastore","featuretype","gridset","style","format")
     category = "Test WMTS Service for FeatureType"
 
     @property
@@ -193,11 +195,13 @@ class TestWMTSService4FeatureType(TestWMTSService):
     
 class TestWMSService4FeatureType(TestWMSService,TestWMTSService4FeatureType):
     arguments = ("workspace","datastore","featuretype","srs","bbox","style","dimension","format")
+    keyarguments = ("workspace","datastore","featuretype","srs","style","dimension","format")
     category = "Test WMS Service for FeatureType"
 
 class TestWMTSService4WMSLayer(TestWMTSService):
     category = "Test WMTS Service for WMSLayer"
     arguments = ("workspace","wmsstore","layername","gridset","zoom","row","column","style","format")
+    keyarguments = ("workspace","wmsstore","layername","gridset","style","format")
 
     @property
     def wmsstore(self):
@@ -209,12 +213,14 @@ class TestWMTSService4WMSLayer(TestWMTSService):
     
 class TestWMSService4WMSLayer(TestWMSService,TestWMTSService4WMSLayer):
     arguments = ("workspace","wmsstore","layername","srs","bbox","style","dimension","format")
+    keyarguments = ("workspace","wmsstore","layername","srs","style","dimension","format")
     category = "Test WMS Service for WMSLayer"
 
 
 class TestWMTSService4Layergroup(TestWMTSService):
     category = "Test WMTS Service for Layergroup"
     arguments = ("workspace","layergroup","gridset","zoom","row","column","style")
+    keyarguments = ("workspace","layergroup","gridset","style")
 
     def __init__(self,workspace,layergroup,layer_bbox,style,post_actions_factory = None,zoom=-1,gridset=settings.GWC_GRIDSET):
         super().__init__(workspace,None,layergroup,layer_bbox,style,post_actions_factory = post_actions_factory,zoom=zoom,gridset=gridset)
@@ -225,6 +231,7 @@ class TestWMTSService4Layergroup(TestWMTSService):
     
 class TestWMSService4Layergroup(TestWMSService,TestWMTSService4Layergroup):
     arguments = ("workspace","layergroup","srs","bbox","style","dimension","format")
+    keyarguments = ("workspace","layergroup","srs","style","dimension","format")
     category = "Test WMS Service for Layergroup"
 
 def createtasks_TestWMSService4FeatureType(getFeatureTypeDetailTask,limit = 0):

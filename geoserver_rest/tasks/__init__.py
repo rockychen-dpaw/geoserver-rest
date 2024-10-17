@@ -5,6 +5,7 @@ from .wmsstoretasks import *
 from .wmslayertasks import *
 from .layergrouptasks import *
 from .mapservicetasks import *
+from .base import OutOfSyncTask
 
 
 class CheckGeoserverAlive(Task):

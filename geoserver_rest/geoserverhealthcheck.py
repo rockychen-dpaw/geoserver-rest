@@ -1,4 +1,5 @@
 import os
+import queue
 import threading
 import logging
 import shutil
@@ -27,11 +28,14 @@ class GeoserverHealthCheck(object):
     warnings_file = None
     reportwriter = None
     warningwriter = None
+    _finished_tasks = None
+    metadata = None
     
-    def __init__(self,geoserver_name,geoserver_url,geoserver_user,geoserver_password,requestheaders=None,dop=1):
+    def __init__(self,geoserver_name,geoserver_url,geoserver_user,geoserver_password,requestheaders=None,dop=1,keep_tasks=False):
+        self.keep_tasks = keep_tasks
         self.geoserver_name = geoserver_name
         self.geoserver = Geoserver(geoserver_url,geoserver_user,geoserver_password,headers=requestheaders)
-        self.taskrunner = TaskRunner(geoserver_name,self.geoserver,dop=dop)
+        self.taskrunner = TaskRunner(geoserver_name,self.geoserver,dop=dop,keep_tasks=keep_tasks)
         self._reportwriteaction = None
         self._warningwriteaction = None
         self.warnings = 0
@@ -41,6 +45,10 @@ class GeoserverHealthCheck(object):
         self.endtime = None
         self._report_dir = None
         self._reports_home = None
+
+    @property
+    def finished_tasks(self):
+        return self._finished_tasks
 
     @property
     def reports_home(self):
@@ -263,13 +271,8 @@ class GeoserverHealthCheck(object):
         self.taskrunner.add_task(task)
 
 
-    def wait_to_finish(self):
-        """
-        return the processing metadata
-        """
-        exceptions = []
+    def close_report_writers(self):
         try:
-            self.taskrunner.wait_to_shutdown()
             self.reportwriter.close()
             self.reportwriter = None
             self.warningwriter.close()
@@ -277,8 +280,36 @@ class GeoserverHealthCheck(object):
         except Exception as ex:
             exceptions.append(ex)
 
+    def wait_to_finish(self,close_report_writer=True):
+        """
+        return the processing metadata
+        """
+        exceptions = []
+        try:
+            self.taskrunner.wait_to_shutdown()
+            if close_report_writer:
+                self.close_report_writers()
+        except Exception as ex:
+            exceptions.append(ex)
+
+        if self.taskrunner.finished_tasks:
+            logger.debug("Begin to populate the finished task map.size={}".format(self.taskrunner.finished_tasks.qsize()))
+            self._finished_tasks = {}
+            index = 0
+            while True:
+                try:
+                    task = self.taskrunner.finished_tasks.get(block=False)
+                except queue.Empty as ex:
+                    task = None
+                index += 1
+                if not task:
+                    break
+                key = (task.category,utils.toMapKey(task.keyparameters))
+                self._finished_tasks[key] = task
+            logger.debug("End to populate the finished task map.size={}".format(len(self._finished_tasks)))
+
         self.endtime = timezone.localtime()
-        metadata = {
+        self.metadata = {
             "starttime": timezone.format(self.starttime,pattern="%Y-%m-%d %H:%M:%S.%f"),
             "endtime": timezone.format(self.endtime,pattern="%Y-%m-%d %H:%M:%S.%f"),
             "exectime": timezone.format_timedelta(self.endtime - self.starttime),
@@ -290,13 +321,17 @@ class GeoserverHealthCheck(object):
             "warnings_file":self.warnings_file if self.warnings_file else "-",
         }
         if exceptions:
-            metadata["exceptions"] = "\r\n----------------------------------------------------\r\n".join(
+            self.metadata["exceptions"] = "\r\n----------------------------------------------------\r\n".join(
                 "\r\n".join(traceback.format_exception(type(ex),ex,ex.__traceback__)) for ex in exceptions
             )
 
+
+    def write_report(self):
+        if not self.metadata:
+            raise Exception("Please call this method after healcheck is finished.")
         try:
             with open(os.path.join(self.report_dir,"reportmeta.json"),'w') as f:
-                f.write(json.dumps(metadata,indent=4))
+                f.write(json.dumps(self.metadata,indent=4))
     
             if os.path.exists(os.path.join(settings.BASE_DIR,"reports.html")):
                 #write the reports.html
@@ -343,18 +378,10 @@ class GeoserverHealthCheck(object):
                 self.warnings,
                 self.errors
             ))
+
         except Exception as ex:
-            exceptions.append(ex)
-
-        if exceptions:
-            metadata["exceptions"] = "\r\n----------------------------------------------------\r\n".join(
-                "\r\n".join(traceback.format_exception(type(ex),ex,ex.__traceback__)) for ex in exceptions
-            )
-
-        return metadata
-
-
-
+            logger.error("Failed to write the report.{}".format(traceback.format_exc()))
+            
 if __name__ == '__main__':
     geoserver_name = os.environ["GEOSERVER_NAME"]
     geoserver_url = os.environ["GEOSERVER_URL"]
@@ -365,11 +392,13 @@ if __name__ == '__main__':
 
     healthcheck = GeoserverHealthCheck(geoserver_name,geoserver_url,geoserver_user,geoserver_password,settings.REQUEST_HEADERS,settings.HEALTHCHECK_DOP)
     healthcheck.start()
-    processing_metadata = healthcheck.wait_to_finish()
-    if settings.EMAIL_ENABLED and (processing_metadata.get("exceptions") or healthcheck.errors):
+    healthcheck.wait_to_finish()
+    healthcheck.write_report()
+
+    if settings.EMAIL_ENABLED and (healthcheck.metadata.get("exceptions") or healthcheck.errors):
         #send email
         subject = "Some errors found on geoserver({})".format(geoserver_name)
-        context = {"healthchecks":[{"healthcheck":healthcheck,"processing_metadata":processing_metadata}]}
+        context = {"healthchecks":[{"healthcheck":healthcheck,"processing_metadata":healthcheck.metadata}]}
         #generate the email body
         body_template = jinja_env.get_template("notify_email.html")
         body = body_template.render(context)

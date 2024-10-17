@@ -47,3 +47,26 @@ def get_domain(url):
     else:
         return None
 
+def toMapKey(d):
+    if d is None:
+        return d
+    elif isinstance(d,(str,bool,int,float)):
+        return d
+    elif isinstance(d,set):
+        data = list(d)
+        data.sort()
+        return toMapKey(data)
+    elif isinstance(d,tuple):
+        return tuple(toMapKey(o) for o in d)
+    elif isinstance(d,list):
+        return tuple([toMapKey(o) for o in d])
+    elif isinstance(d,dict):
+        keys = [k for k in d.keys()]
+        keys.sort()
+        return tuple([ (k,toMapKey(d[k])) for k in keys])
+    else:
+        try:
+            return tuple([toMapKey(o) for o in iter(d)])
+        except:
+            return d
+

@@ -11,6 +11,7 @@ class ListLayergroups(Task):
     Return [layergroup]
     """
     arguments = ("workspace",)
+    keyarguments = ("workspace",)
     category = "List Layergroups"
     def __init__(self,workspace,post_actions_factory = None):
         super().__init__(post_actions_factory = post_actions_factory) 
@@ -29,6 +30,7 @@ class GetLayergroupDetail(Task):
     Return a dict of layer group detail
     """
     arguments = ("workspace","layergroup")
+    keyarguments = ("workspace","layergroup")
     category = "Get Layergroup Detail "
 
     def __init__(self,workspace,layergroup,post_actions_factory = None):

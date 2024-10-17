@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 class TaskRunner(object):
     endtask = object()
     finished_tasks = None
+
     def __init__(self,name,geoserver,dop=1,keep_tasks=False):
         """
         timeout: the timeout for getting task from queue

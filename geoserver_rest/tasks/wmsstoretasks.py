@@ -5,6 +5,7 @@ class ListWMSStores(Task):
     Return [store]
     """
     arguments = ("workspace",)
+    keyarguments = ("workspace",)
     category = "List WMSStores"
 
     def __init__(self,workspace,post_actions_factory = None):

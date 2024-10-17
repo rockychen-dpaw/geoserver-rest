@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 class WMSGetCapabilitiesTask(Task):
     category = "Get Capabilities"
     arguments = ("service",)
+    keyarguments = ("service",)
     service = "WMS"
     url = None
 
@@ -36,6 +37,7 @@ class ListWMSLayers(Task):
     Return [wmslayer]
     """
     arguments = ("workspace","wmsstore")
+    keyarguments = ("workspace","wmsstore")
     category = "List WMSLayers"
     def __init__(self,workspace,wmsstore,post_actions_factory = None):
         super().__init__(post_actions_factory = post_actions_factory) 
@@ -59,6 +61,7 @@ class GetWMSLayerDetail(Task):
     Return a dict of wms layer detail
     """
     arguments = ("workspace","wmsstore","layername")
+    keyarguments = ("workspace","wmsstore","layername")
     category = "Get WMSLayer Detail "
 
     def __init__(self,workspace,wmsstore,layername,post_actions_factory = None):

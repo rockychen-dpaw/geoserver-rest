@@ -23,6 +23,7 @@ class ListResourcesInWorkspace(Task):
     Return ([datastore],[wmsstore],[layergroup])
     """
     arguments = ("workspace",)
+    keyarguments = ("workspace",)
     category = "List Resources In Workspace"
 
     def __init__(self,workspace,post_actions_factory = None):

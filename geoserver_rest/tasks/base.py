@@ -21,13 +21,13 @@ class Task(object):
     result = None
 
     arguments = None
+    keyarguments = None
     post_actions_factory = None
 
     def __init__(self,post_actions_factory = None):
         self.retries = settings.TASK_RETRIES.get(self.__class__.__name__,1)
         if self.retries < 1:
             self.retries = 1
-        logger.debug("{} retry {} times".format(self.__class__.__name__,self.retries))
         if post_actions_factory:
             self.post_actions_factory = post_actions_factory
 
@@ -38,6 +38,16 @@ class Task(object):
         """
         if self.arguments:
             for arg in self.arguments :
+                v = getattr(self,arg)
+                yield (arg,"" if v is None else v)
+
+    @property
+    def keyparameters(self):
+        """
+        A generator to return the parameter tuple (name,value)
+        """
+        if self.keyarguments:
+            for arg in self.keyarguments :
                 v = getattr(self,arg)
                 yield (arg,"" if v is None else v)
 
@@ -190,4 +200,36 @@ class Task(object):
     def _exec(self,geoserver):
         raise Exception("Not implemented")
 
+
+class OutOfSyncTask(Task):
+    def __init__(self,task,missing=True):
+        super().__init__()
+        self.task = task
+        self.missing = missing
+
+    def _exec(self,geoserver):
+        raise Exception("Not Supported")
+
+    def reportrows(self):
+        return
+
+    def warnings(self):
+        if self.missing:
+            yield (self.task.category,
+                self.task.format_parameters("\r\n"),
+                self.ERROR,
+                "",
+                "",
+                "",
+                "Not exist in slave geoserver"
+            )
+        else:
+            yield (self.task.category,
+                self.task.format_parameters("\r\n"),
+                self.WARNING,
+                "",
+                "",
+                "",
+                "Not exist in admin geoserver"
+            )
 

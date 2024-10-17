@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 class WFSGetCapabilitiesTask(Task):
     category = "Get Capabilities"
     arguments = ("service",)
+    keyarguments = ("service",)
     service = "WFS"
     url = None
     def _format_result(self):
@@ -35,6 +36,7 @@ class ListFeatureTypes(Task):
     Return [featuretype]
     """
     arguments = ("workspace","datastore")
+    keyarguments = ("workspace","datastore")
     category = "List Features"
     def __init__(self,workspace,datastore,post_actions_factory = None):
         super().__init__(post_actions_factory = post_actions_factory) 
@@ -58,6 +60,7 @@ class GetFeatureTypeDetail(Task):
     Return a dict of feature type detail
     """
     arguments = ("workspace","datastore","featuretype")
+    keyarguments = ("workspace","datastore","featuretype")
     category = "Get Featuretype Detail "
 
     def __init__(self,workspace,datastore,featuretype,post_actions_factory = None):
@@ -129,6 +132,7 @@ class GetFeatureCount(Task):
     Return a dict of feature type detail
     """
     arguments = ("workspace","datastore","featuretype")
+    keyarguments = ("workspace","datastore","featuretype")
     category = "Get Feature Count"
 
     def __init__(self,workspace,datastore,featuretype,post_actions_factory = None):
@@ -148,6 +152,7 @@ class GetFeatures(Task):
     Return a number of features in geojson format
     """
     arguments = ("workspace","datastore","featuretype","srs","bbox","count")
+    keyarguments = ("workspace","datastore","featuretype","srs")
     category = "Get Features"
     url = None
 

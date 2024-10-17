@@ -9,6 +9,7 @@ from . import utils
 from . import loggingconfig
 from .geoserverhealthcheck import GeoserverHealthCheck
 from .mail import EmailMessage
+from .tasks import OutOfSyncTask
 
 logger = logging.getLogger("geoserver_rest.geoservershealthcheck")
 
@@ -20,7 +21,7 @@ jinja_env = jinja2.Environment(
 class GeoserversHealthCheck(object):
     
     def __init__(self,geoservers,requestheaders=None,dop=1):
-        self.healthchecks = [GeoserverHealthCheck(geoserver[0],geoserver[1],geoserver[2],geoserver[3],requestheaders=requestheaders,dop=dop) for geoserver in geoservers]
+        self.healthchecks = [GeoserverHealthCheck(geoserver[0],geoserver[1],geoserver[2],geoserver[3],requestheaders=requestheaders,dop=dop,keep_tasks=True) for geoserver in geoservers]
 
     def start(self):
         for healthcheck in self.healthchecks:
@@ -52,8 +53,37 @@ class GeoserversHealthCheck(object):
 
     def wait_to_finish(self):
         processing_metadatas = []
+        #wait to finish
         for healthcheck in self.healthchecks:
-            processing_metadatas.append({"healthcheck":healthcheck,"processing_metadata":healthcheck.wait_to_finish()})
+            healthcheck.wait_to_finish(close_report_writer=False)
+
+        #check the sync status among geoservers
+        tasks = self.healthchecks[0].finished_tasks
+        for healthcheck in self.healthchecks[1:]:
+            slavetasks = healthcheck.finished_tasks
+            for key,task in tasks.items():
+                if key in slavetasks:
+                    continue
+                healthcheck._warningwriteaction(OutOfSyncTask(task,missing=True))
+                healthcheck.metadata["errors"] += 1
+
+            for key,task in slavetasks.items():
+                if key in tasks:
+                    continue
+                healthcheck._warningwriteaction(OutOfSyncTask(task,missing=False))
+                healthcheck.metadata["warnings"] += 1
+
+        #close report writers
+        for healthcheck in self.healthchecks:
+            healthcheck.close_report_writers()
+
+        #write report writers
+        for healthcheck in self.healthchecks:
+            healthcheck.write_report()
+
+        #get the metadata
+        for healthcheck in self.healthchecks:
+            processing_metadatas.append({"healthcheck":healthcheck,"processing_metadata":healthcheck.metadata})
 
         return processing_metadatas
 
