@@ -74,17 +74,11 @@ def get_iter(coordinates):
     if not coordinates:
         return
     if all(isinstance(c,(int,float)) for c in coordinates):
-        if len(coordinates) == 2:
-            yield coordinates
-            return
-        else:
-            raise Exception("Incorrect coordinates")
+        yield coordinates
+        return
     for coord in coordinates:
         if all(isinstance(c,(int,float)) for c in coord):
-            if len(coord) == 2:
-                yield coord
-            else:
-                raise Exception("Incorrect coordinates")
+            yield coord
         else:
             for c in get_iter(coord):
                 yield c

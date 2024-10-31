@@ -321,7 +321,7 @@ def createtasks_TestWMSService4Feature(getFeaturesTask,limit = 0):
     #get the intersection between layer_box and settings.MAX_BBOX
     layer_bbox = getFeaturesTask.result["features"][0].get("bbox")
     if not layer_bbox:
-        layer_bbox = utils.get_bbox(getFeaturesTask.result["features"][0].get("geometry",{}).get("coordinates"))
+        layer_bbox = utils.get_bbox((getFeaturesTask.result["features"][0].get("geometry") or {}).get("coordinates"))
 
     if not layer_bbox or any(d is None for d in layer_bbox ):
         return
@@ -358,6 +358,8 @@ def createtasks_TestWMTSService4Feature(getFeaturesTask,limit = 0):
         return
     #get the intersection between layer_box and settings.MAX_BBOX
     layer_bbox = getFeaturesTask.result["features"][0].get("bbox")
+    if not layer_bbox:
+        layer_bbox = utils.get_bbox((getFeaturesTask.result["features"][0].get("geometry") or {}).get("coordinates"))
     if not layer_bbox or any(d is None for d in layer_bbox ):
         return
     
