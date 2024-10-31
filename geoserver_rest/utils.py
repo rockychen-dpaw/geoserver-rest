@@ -70,3 +70,44 @@ def toMapKey(d):
         except:
             return d
 
+def get_iter(coordinates):
+    if not coordinates:
+        return
+    if all(isinstance(c,(int,float)) for c in coordinates):
+        if len(coordinates) == 2:
+            yield coordinates
+            return
+        else:
+            raise Exception("Incorrect coordinates")
+    for coord in coordinates:
+        if all(isinstance(c,(int,float)) for c in coord):
+            if len(coord) == 2:
+                yield coord
+            else:
+                raise Exception("Incorrect coordinates")
+        else:
+            for c in get_iter(coord):
+                yield c
+
+def get_bbox(coordinates):
+    bbox = [None,None,None,None]
+    for coord in get_iter(coordinates):
+        if not coord:
+            continue
+
+        if coord[0] is not None:
+            if not bbox[0] or bbox[0] > coord[0]:
+                bbox[0] = coord[0]
+            if not bbox[2] or bbox[2] < coord[0]:
+                bbox[2] = coord[0]
+
+        if coord[1] is not None:
+            if not bbox[1] or bbox[1] > coord[1]:
+                bbox[1] = coord[1]
+            if not bbox[3] or bbox[3] < coord[1]:
+                bbox[3] = coord[1]
+
+    return None if any(c is None for c in bbox) else bbox
+                
+                
+

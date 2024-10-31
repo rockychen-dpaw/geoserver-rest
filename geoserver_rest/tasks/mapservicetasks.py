@@ -4,6 +4,7 @@ import os
 
 from .base import Task
 from .. import settings
+from .. import utils
 
 logger = logging.getLogger(__name__)
 
@@ -319,6 +320,9 @@ def createtasks_TestWMSService4Feature(getFeaturesTask,limit = 0):
         return
     #get the intersection between layer_box and settings.MAX_BBOX
     layer_bbox = getFeaturesTask.result["features"][0].get("bbox")
+    if not layer_bbox:
+        layer_bbox = utils.get_bbox(getFeaturesTask.result["features"][0].get("geometry",{}).get("coordinates"))
+
     if not layer_bbox or any(d is None for d in layer_bbox ):
         return
 
