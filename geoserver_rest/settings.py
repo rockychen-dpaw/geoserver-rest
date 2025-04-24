@@ -95,3 +95,23 @@ if minutes == 1:
 elif minutes > 1:
     MAX_EXPIRE_CLIENTS_STR = "{}{} Minutes".format("{} ".format(MAX_EXPIRE_CLIENTS_STR) if MAX_EXPIRE_CLIENTS_STR else "",minutes)
 
+EXCLUDED_LAYERS = os.environ.get("EXCLUDED_LAYERS")
+if EXCLUDED_LAYERS:
+    layers = {}
+    for l in EXCLUDED_LAYERS.split(","):
+        l = l.strip()
+        if not l:
+            continue
+        try:
+            workspace,layer = l.split(":",1)
+            if workspace not in layers:
+                layers[workspace] = set()
+
+            layers[workspace].add(layer)
+        except:
+            continue
+    EXCLUDED_LAYERS = layers
+else:
+    EXCLUDED_LAYERS = {}
+
+

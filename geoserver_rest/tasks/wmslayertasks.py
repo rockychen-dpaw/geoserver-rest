@@ -53,6 +53,11 @@ class ListWMSLayers(Task):
 
     def _exec(self,geoserver):
         result = geoserver.list_wmslayers(self.workspace,self.wmsstore) or []
+        if self.workspace in settings.EXCLUDED_LAYERS:
+            for i in range(len(result) - 1,-1,-1):
+                if result[i] in settings.EXCLUDED_LAYERS[self.workspace]:
+                    #excluded
+                    del result[i]
         result.sort()
         return result
         
