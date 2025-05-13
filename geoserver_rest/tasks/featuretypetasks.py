@@ -83,8 +83,8 @@ class GetFeatureTypeDetail(Task):
             for gridset in settings.GWC_GRIDSETS:
                 if not any(gridsetdata["gridSetName"] == gridset  for gridsetdata in self.result["gwc"]["gridSubsets"]):
                     msg = "{}{}{}".format(msg or "", "\r\n" if msg else "","The gridset({}) was not configured".format(gridset))
-            if not self.result["gwc"]["enabled"]:
-                msg = "{}{}{}".format(msg or "", "\r\n" if msg else "","The GWC was disabled.")
+            #if not self.result["gwc"]["enabled"]:
+            #    msg = "{}{}{}".format(msg or "", "\r\n" if msg else "","The GWC was disabled.")
             if self.result["gwc"].get("expireCache",0) < 0:
                 msg = "{}{}{}".format(msg or "", "\r\n" if msg else "","The GWC server cache was disabled.")
                 level = self.ERROR

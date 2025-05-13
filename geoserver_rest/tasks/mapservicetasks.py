@@ -280,7 +280,7 @@ def createtasks_TestWMTSService4FeatureType(getFeatureTypeDetailTask,limit = 0):
         return
     if not getFeatureTypeDetailTask.result:
         return
-    if not getFeatureTypeDetailTask.result.get("gwc"):
+    if not getFeatureTypeDetailTask.result.get("gwc") or not getFeatureTypeDetailTask.result["gwc"].get("enabled",False):
         return
     #get the intersection between layer_box and settings.MAX_BBOX
     layer_bbox = getFeatureTypeDetailTask.result.get("latLonBoundingBox")
@@ -354,7 +354,7 @@ def createtasks_TestWMTSService4Feature(getFeaturesTask,limit = 0):
     """
     if not getFeaturesTask.result or not getFeaturesTask.result.get("features"):
         return
-    if not getFeaturesTask.featuredetail.get("gwc"):
+    if not getFeaturesTask.featuredetail.get("gwc") or not getFeaturesTask.featuredetail["gwc"].get("enabled",False):
         return
     #get the intersection between layer_box and settings.MAX_BBOX
     layer_bbox = getFeaturesTask.result["features"][0].get("bbox")
@@ -407,7 +407,7 @@ def createtasks_TestWMTSService4WMSLayer(getWMSLayerDetailTask,limit = 0):
     """
     if not getWMSLayerDetailTask.result:
         return
-    if not getWMSLayerDetailTask.result.get("gwc"):
+    if not getWMSLayerDetailTask.result.get("gwc") or not getWMSLayerDetailTask.result["gwc"].get("enabled",False):
         return
     #get the intersection between layer_box and settings.MAX_BBOX
     layer_bbox = getWMSLayerDetailTask.result.get("latLonBoundingBox")
@@ -466,7 +466,7 @@ def createtasks_TestWMTSService4Layergroup(getLayergroupDetailTask,limit = 0):
     """
     if not getLayergroupDetailTask.result:
         return
-    if not getLayergroupDetailTask.result.get("gwc"):
+    if not getLayergroupDetailTask.result.get("gwc") or not getLayergroupDetailTask.result["gwc"].get("enabled",False):
         return
     #get the intersection between layer_box and settings.MAX_BBOX
     layer_bbox = getLayergroupDetailTask.result.get("bounds")
