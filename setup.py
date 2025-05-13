@@ -26,6 +26,7 @@ setup(
         'requests=2.25.0',
         'pytz=2024.1',
         'Jinja2=3.1.4'
+        'pyproj=3.7.1'
     ],
     classifiers=[
         'Intended Audience :: Developers',

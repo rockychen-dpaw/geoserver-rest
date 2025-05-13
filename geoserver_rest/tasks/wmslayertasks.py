@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from pyproj import Transformer
 
 from .base import Task
 from .. import timezone
@@ -78,6 +79,15 @@ class GetWMSLayerDetail(Task):
     def _format_result(self):
         return json.dumps(self.result,indent=4) if self.result else "{}"
 
+    def _warnings(self):
+        msg = None
+        level = self.WARNING
+        if self.result.get("originalLatLonBoundingBox") and self.result["originalLatLonBoundingBox"].get("crs","EPSG:4326").upper() not in ("EPSG:4326","EPSG:4283"):
+            msg = "The CRS of latLonBoundingBox is not EPSG:4326 or EPSG:4283"
+        
+        if msg:
+            yield (level,msg)
+
     def _exec(self,geoserver):
         result = {}
         #get the layer detail
@@ -86,6 +96,14 @@ class GetWMSLayerDetail(Task):
             if not detail.get(k):
                 continue
             result[k] = detail[k]
+
+        if result.get("latLonBoundingBox") and result["latLonBoundingBox"].get("crs","EPSG:4326").upper() not in ("EPSG:4326","EPSG:4283"):
+            #tranform the bbox to epsg:4326
+            result["originalLatLonBoundingBox"] = dict(result["latLonBoundingBox"])
+            transformer = Transformer.from_crs(result["latLonBoundingBox"]["crs"], "EPSG:4326")
+            result["latLonBoundingBox"]["miny"], result["latLonBoundingBox"]["minx"] = transformer.transform(result["latLonBoundingBox"]["miny"], result["latLonBoundingBox"]["minx"])
+            result["latLonBoundingBox"]["maxy"], result["latLonBoundingBox"]["maxx"] = transformer.transform(result["latLonBoundingBox"]["maxy"], result["latLonBoundingBox"]["maxx"])
+
         #get the gwc details
         detail = geoserver.get_gwclayer(self.workspace,self.layername)
         if detail:

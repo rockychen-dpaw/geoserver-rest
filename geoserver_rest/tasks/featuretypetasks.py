@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+from pyproj import Transformer
 
 from .base import Task
 from .. import settings
@@ -79,6 +80,13 @@ class GetFeatureTypeDetail(Task):
             yield (self.ERROR,"Detail is missing")
         msg = None
         level = self.WARNING
+
+        if self.result.get("originalLatLonBoundingBox") and self.result["originalLatLonBoundingBox"].get("crs","EPSG:4326").upper() not in ("EPSG:4326","EPSG:4283"):
+            msg = "{}{}{}".format(msg or "", "\r\n" if msg else "","The CRS of latLonBoundingBox is not EPSG:4326 or EPSG:4283")
+        
+        if msg:
+            yield (level,msg)
+
         if self.result.get("gwc"):
             for gridset in settings.GWC_GRIDSETS:
                 if not any(gridsetdata["gridSetName"] == gridset  for gridsetdata in self.result["gwc"]["gridSubsets"]):
@@ -117,6 +125,14 @@ class GetFeatureTypeDetail(Task):
 
                 continue
             result[k] = detail[k]
+
+        if result.get("latLonBoundingBox") and result["latLonBoundingBox"].get("crs","EPSG:4326").upper() not in ("EPSG:4326","EPSG:4283"):
+            #tranform the bbox to epsg:4326
+            result["originalLatLonBoundingBox"] = dict(result["latLonBoundingBox"])
+            transformer = Transformer.from_crs(result["latLonBoundingBox"]["crs"], "EPSG:4326")
+            result["latLonBoundingBox"]["miny"], result["latLonBoundingBox"]["minx"] = transformer.transform(result["latLonBoundingBox"]["miny"], result["latLonBoundingBox"]["minx"])
+            result["latLonBoundingBox"]["maxy"], result["latLonBoundingBox"]["maxx"] = transformer.transform(result["latLonBoundingBox"]["maxy"], result["latLonBoundingBox"]["maxx"])
+
         #get the feature styles
         styles = geoserver.get_layer_styles(self.workspace,self.featuretype)
         result["defaultStyle"] = (":".join(styles[0]) if styles[0][0] else styles[0][1]) if styles else None
