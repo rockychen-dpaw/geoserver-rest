@@ -221,14 +221,16 @@ class FeaturetypeMixin(object):
         Publish a new featuretype
         parameters:
             nativeName: the layer name in the upstream, if empty, use layername as nativeName
-            nativeBoundingBox: a native bounding box (minx Longitude , miny Latitude , maxx Longitude , maxy Latitude,crs ); if doesn't exist, looking for bbox.
-            latLonBoundingBox: a native bounding box (min Longitude , min Latitude , max Longitude , max Latitude,crs ); if doesn't exist, looking for bbox.
-            boundingBox: a bounding box can be used by nativeBoundingBox and latLonBoundingBox if they doesn't exist
-            srs: the spatial reference system
-            viewsql: the view sql 
-            geometry_column: the column name of the geometry data
-            geometry_type: the type of the geometry data
-            nativeName: the native name in the data source
+            nativeBoundingBox: optional, a native bounding box (minx Longitude , miny Latitude , maxx Longitude , maxy Latitude,crs ); if doesn't exist, looking for bbox.
+            latLonBoundingBox: optional, a native bounding box (min Longitude , min Latitude , max Longitude , max Latitude,crs ); if doesn't exist, looking for bbox.
+            boundingBox: optinal, a bounding box can be used by nativeBoundingBox and latLonBoundingBox if they doesn't exist
+            title: optional, default is layername
+            abstract: optional, default is empty
+            srs: optional, default is epsg:4326,the spatial reference system
+            keywords: optional,
+            viewsql: optional, the view sql 
+            geometry_column: required for viewsql; the column name of the geometry data
+            geometry_type: required for viewsql; the type of the geometry data
 
         """
         nativeBoundingBox = parameters.get("nativeBoundingBox") or parameters.get("boundingBox")

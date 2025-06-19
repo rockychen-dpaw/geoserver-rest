@@ -1,0 +1,217 @@
+import os
+import queue
+import threading
+import logging
+import shutil
+import jinja2
+import traceback
+from collections import OrderedDict
+
+from .taskrunner import TaskRunner
+from .geoserver import Geoserver
+from .tasks import *
+from .csv import CSVWriter
+from . import settings
+from . import timezone
+from . import loggingconfig
+from . import utils
+from .mail import EmailMessage
+
+logger = logging.getLogger("geoserver_rest.geoserverhealthcheck")
+
+jinja_env = jinja2.Environment(
+    loader=jinja2.FileSystemLoader([settings.BASE_DIR]),
+    autoescape=jinja2.select_autoescape()
+)
+
+class GeoserverCompatibilityCheck(object):
+    report_file = None
+    warnings_file = None
+    reportwriter = None
+    warningwriter = None
+    _finished_tasks = None
+    metadata = None
+    
+    def __init__(self,geoserver_url,geoserver_user,geoserver_password,requestheaders=None):
+        self.geoserver = Geoserver(geoserver_url,geoserver_user,geoserver_password,headers=requestheaders)
+        self._resources = OrderedDict([
+            ["users",[]], ["usergroups",OrderedDict()], 
+            ["workspaces",OrderedDict()]
+        ])
+        self._checklist = OrderedDict([
+            ["workspace", OrderedDict()], 
+            ["localdatastore", OrderedDict()],
+            ["styles",OrderedDict()]
+        ])
+
+    def run(self):
+        pass
+
+    def create_accesspermission(self):
+        pass
+
+    def update_accesspermission(self):
+        pass
+
+    def delete_accesspermission(self):
+        pass
+
+    @property
+    def style_folder(self):
+        """
+        Return style folder; return None if not configured properly
+
+        """
+        folder = os.environ.get("STYLE_FOLDER")
+        if folder:
+            return folder
+        sample_dataset = os.environ.get("SAMPLE_DATASET")
+        if sample_dataset:
+            return os.path.split(sample_dataset)[0]
+        return None
+
+
+    def create_wfs(self):
+        wsname = "wsa4compatibilitycheck"
+        if self.geoserver.has_workspace(wsname):
+            self.geoserver.delete_workspace(wsname)
+            if self.geoserver.has_workspace(wsname):
+                self._checklist["workspace"]["delete"] = [[False,"Failed to delete workspace '{}'".format(wsname)]]
+                raise Exception("Failed to delete workspace '{}'".format(wsname))
+            
+        self.geoserver.create_workspace(wsname)
+        if self.geoserver.has_workspace(wsname):
+            self._checklist["workspace"]["create"] = [[True,"OK"]]
+            self._resources["workspaces"][wsname] = OrderedDict()
+        else:
+            self._checklist["workspace"]["create"] = [[False,"Failed to create workspace '{}'".format(wsname)]]
+            raise Exception("Failed to create workspace '{}'".format(wsname))
+
+        sample_dataset = os.environ.get("SAMPLE_DATASET")
+        if sample_dataset:
+            try:
+                storename = self._create_localdatastore(wsname,dataset)
+
+                layername = os.path.basename(sample_dataset).split(".",1)[0]
+                self._publish_wfs_layers(wsname,storename,layername)
+                
+            except:
+                pass
+        
+    def _create_localdatastore(self,wsname,dataset):
+        #create the test workspace if doesn't have
+        storename = "localds4compatibilitycheck"
+        self.geoserver.upload_dataset(wsname,storename,dataset)
+        if self.geoserver.has_datastore(test_workspace,storename):
+            self._resources["workspaces"][wsname]["localdatastores"] = OrderedDict([[storename,OrderDict()]])
+            self._checklist["localdatastore"]["create"] = [[True,"OK"]]
+            return storename
+        else:
+            self._checklist["localdatastore"]["create"] = [[False,"Failed to upload dataset({})".format(dataset)]]
+            raise Exception("Failed to upload dataset({})".format(dataset))
+
+    def _publish_wfs_layers(self,wsname,storename,layername):
+        parameters = {"nativeName":layername}
+        self.geoserver.publish_featuretype(wsname,storename,layername,parameters,create=True)
+        if has_featuretype(wsname,layername,storename):
+            self._resources["workspaces"][wsname]["localdatastores"][storename][layername] = OrderedDict()
+            self._checklist["localfeaturetype"]["create"] = [[True,"OK"]]
+        else:
+            self._checklist["localfeaturetype"]["create"] = [[False,"Failed to publish featuretype '{}' from local dataset".format(layername)]]
+            raise Exception("Failed to publish featuretype '{}' from local dataset".format(layername))
+
+    def _create_styles(self,wsname,dataset,folder=None):
+        #find the style folder and layer name
+        stylefolder,layername = os.path.split(dataset)
+        layername = os.path.splitext(layername)[0]
+        if not stylefolder:
+            stylefolder = self.style_folder
+        if not stylefolder:
+            #not style found
+            return
+
+        #find the style 
+        styles = []
+        for f in os.listdir(stylefolder):
+            basename,fileext = os.path.splitext(f)
+            if fileext != ".sld":
+                continue
+            prefix = "{}.".format(layername)
+            if not basename.startswith(prefix):
+                continue
+            try:
+                stylename,styleversion = layername[len(prefix):].split(".",1)
+            except ValueError as ex:
+                stylename = layername[len(prefix):]
+                styleversion = "1.0.0"
+            except:
+                continue
+            styles.appoend([stylename,styleversion,f])
+
+        #sort the style, always put the style 'default' as the first item
+        styles.sort(key=lambda s: "0{}".format(s[0])  if s[0] =="default" else s[0])
+
+        for stylename,styleversion,f in styles:
+            try:
+                with open(os.path.join(stylefolder,f),'r') as fin:
+                    styledata = fin.read()
+                    self.geoserver.update_style(wsname,stylename,styleversion,styledata)
+                if self.geoserver.has_style(wsname,stylename)
+                    self._resources["workspaces"][wsname]["localdatastores"][storename][layername][stylename] = None
+                    self._checklist["style"]["create"] = [[True,"OK"]]
+                else:
+                    self._checklist["style"]["create"] = [[False,"Failed to create style '{}'".format(f)]]
+            except Exception as ex:
+                self._checklist["style"]["create"] = [[False,"Failed to create style '{}'.{}".format(f,ex)]]
+
+    def update_wfs(self):
+        pass
+
+    def delte_wfs(self):
+        pass
+
+    def create_wms(self):
+        pass
+
+    def update_wms(self):
+        pass
+
+    def delete_wms(self):
+        pass
+
+    def create_wmts(self):
+        pass
+
+    def update_wmts(self):
+        pass
+
+    def clear_wmts_cache(self):
+        pass
+
+    def expire_wmts_cache(self):
+        pass
+
+    def delete_wmts(self):
+        pass
+
+    def create_layergroup(self):
+        pass
+
+    def update_layergroup(self):
+        pass
+
+    def delete_layergroup(self):
+        pass
+
+
+            
+if __name__ == '__main__':
+    geoserver_url = os.environ["GEOSERVER_URL"]
+    geoserver_user = os.environ["GEOSERVER_USER"]
+    geoserver_password = os.environ["GEOSERVER_PASSWORD"]
+
+    compatibilitycheck = GeoserverCompatibilityCheck(geoserver_url,geoserver_user,geoserver_password,settings.REQUEST_HEADERS)
+    compatibilitycheck.run()
+
+
+

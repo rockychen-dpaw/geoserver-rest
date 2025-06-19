@@ -82,8 +82,8 @@ class GetWMSLayerDetail(Task):
     def _warnings(self):
         msg = None
         level = self.WARNING
-        if self.result.get("originalLatLonBoundingBox") and self.result["originalLatLonBoundingBox"].get("crs","EPSG:4326").upper() not in ("EPSG:4326","EPSG:4283"):
-            msg = "The CRS of latLonBoundingBox is not EPSG:4326 or EPSG:4283"
+        if self.result.get("originalLatLonBoundingBox"):
+            msg = "The CRS of latLonBoundingBox is not EPSG:4326 or EPSG:4283\r\n{}".format(self.result.get("originalLatLonBoundingBox"))
         
         if msg:
             yield (level,msg)
@@ -97,12 +97,19 @@ class GetWMSLayerDetail(Task):
                 continue
             result[k] = detail[k]
 
-        if result.get("latLonBoundingBox") and result["latLonBoundingBox"].get("crs","EPSG:4326").upper() not in ("EPSG:4326","EPSG:4283"):
-            #tranform the bbox to epsg:4326
-            result["originalLatLonBoundingBox"] = dict(result["latLonBoundingBox"])
-            transformer = Transformer.from_crs(result["latLonBoundingBox"]["crs"], "EPSG:4326")
-            result["latLonBoundingBox"]["miny"], result["latLonBoundingBox"]["minx"] = transformer.transform(result["latLonBoundingBox"]["miny"], result["latLonBoundingBox"]["minx"])
-            result["latLonBoundingBox"]["maxy"], result["latLonBoundingBox"]["maxx"] = transformer.transform(result["latLonBoundingBox"]["maxy"], result["latLonBoundingBox"]["maxx"])
+        if result.get("latLonBoundingBox"):
+            if "crs" not in result["latLonBoundingBox"]:
+                result["latLonBoundingBox"]["crs"] = "EPSG:4326"
+            elif isinstance(result["latLonBoundingBox"]["crs"],dict):
+                result["latLonBoundingBox"]["crs"] = result["latLonBoundingBox"]["crs"]["$"]
+                
+            if result["latLonBoundingBox"]["crs"].upper() not in ("EPSG:4326","EPSG:4283"):
+                #tranform the bbox to epsg:4326
+                result["originalLatLonBoundingBox"] = dict(result["latLonBoundingBox"])
+                transformer = Transformer.from_crs(result["latLonBoundingBox"]["crs"], "EPSG:4326")
+                result["latLonBoundingBox"]["miny"], result["latLonBoundingBox"]["minx"] = transformer.transform(result["latLonBoundingBox"]["miny"], result["latLonBoundingBox"]["minx"])
+                result["latLonBoundingBox"]["maxy"], result["latLonBoundingBox"]["maxx"] = transformer.transform(result["latLonBoundingBox"]["maxy"], result["latLonBoundingBox"]["maxx"])
+
 
         #get the gwc details
         detail = geoserver.get_gwclayer(self.workspace,self.layername)

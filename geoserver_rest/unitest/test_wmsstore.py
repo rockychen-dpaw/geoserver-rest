@@ -33,12 +33,18 @@ class WMSStoreTest(BaseTest):
             parameters["connectTimeout"] = 30
             print("Try to update the wmsstore({})".format(storename))
             self.assertFalse(self.geoserver.update_wmsstore(test_workspace,storename,parameters,create=False),"The wmsstore({}) should be updated".format(storename))
+            wmsstoredata = self.geoserver.get_wmsstore(test_workspace,storename)
+            for key in ("maxConnections","connectTimeout"):
+                self.assertEqual(self.geoserver.get_wmsstore_field(wmsstoredata,key),parameters[key],"The {1}({2}) of wmsstore({0}) should be {3}".format(storename,key,self.geoserver.get_wmsstore_field(wmsstoredata,key),parameters[key]))
             print("Update the wmsstore({}) successfully".format(storename))
 
             parameters["maxConnections"] = 10
             parameters["connectTimeout"] = 60
             print("Try to update the wmsstore({}) again".format(storename))
             self.assertFalse(self.geoserver.update_wmsstore(test_workspace,storename,parameters),"The wmsstore({}) should be updated".format(storename))
+            wmsstoredata = self.geoserver.get_wmsstore(test_workspace,storename)
+            for key in ("maxConnections","connectTimeout"):
+                self.assertEqual(self.geoserver.get_wmsstore_field(wmsstoredata,key),parameters[key],"The {1}({2}) of wmsstore({0}) should be {3}".format(storename,key,self.geoserver.get_wmsstore_field(wmsstoredata,key),parameters[key]))
             print("Update the wmsstore({}) successfully".format(storename))
 
             print("list the wmsstores in workspace({})".format(test_workspace))

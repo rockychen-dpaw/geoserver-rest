@@ -10,4 +10,5 @@ from .wmslayer import WMSLayerMixin
 from .wmsstore import WMSStoreMixin
 from .workspace import WorkspaceMixin
 from .usergroup import UsergroupMixin
+from .roles import RolesMixin
 from .wmsservice import WMSServiceMixin

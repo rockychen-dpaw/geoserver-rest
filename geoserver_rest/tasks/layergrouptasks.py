@@ -51,8 +51,8 @@ class GetLayergroupDetail(Task):
             yield (self.ERROR,"Detail is missing")
         msg = None
         level = self.WARNING
-        if self.result.get("originalBonds") and self.result["originalBonds"].get("crs","EPSG:4326").upper() not in ("EPSG:4326","EPSG:4283"):
-            msg = "The CRS of latLonBoundingBox is not EPSG:4326 or EPSG:4283"
+        if self.result.get("originalBonds"):
+            msg = "The CRS of latLonBoundingBox is not EPSG:4326 or EPSG:4283\r\n{}".format(self.result.get("originalBonds"))
 
         if self.result.get("gwc"):
             for gridset in settings.GWC_GRIDSETS:
@@ -78,12 +78,18 @@ class GetLayergroupDetail(Task):
                 continue
             result[k] = detail[k]
 
-        if result.get("bonds") and result["bonds"].get("crs","EPSG:4326").upper() not in ("EPSG:4326","EPSG:4283"):
-            #tranform the bbox to epsg:4326
-            result["originalBonds"] = dict(result["bonds"])
-            transformer = Transformer.from_crs(result["bonds"]["crs"], "EPSG:4326")
-            result["bonds"]["miny"], result["bonds"]["minx"] = transformer.transform(result["bonds"]["miny"], result["bonds"]["minx"])
-            result["bonds"]["maxy"], result["bonds"]["maxx"] = transformer.transform(result["bonds"]["maxy"], result["bonds"]["maxx"])
+        if result.get("bonds"):
+            if "crs" not in result["bonds"]:
+                result["bonds"]["crs"] = "EPSG:4326"
+            elif isinstance(result["bonds"]["crs"],dict):
+                result["bonds"]["crs"] = result["bonds"]["crs"]["$"]
+                
+            if result["bonds"]["crs"].upper() not in ("EPSG:4326","EPSG:4283"):
+                #tranform the bbox to epsg:4326
+                result["originalBonds"] = dict(result["bonds"])
+                transformer = Transformer.from_crs(result["bonds"]["crs"], "EPSG:4326")
+                result["bonds"]["miny"], result["bonds"]["minx"] = transformer.transform(result["bonds"]["miny"], result["bonds"]["minx"])
+                result["bonds"]["maxy"], result["bonds"]["maxx"] = transformer.transform(result["bonds"]["maxy"], result["bonds"]["maxx"])
 
         detail = geoserver.get_gwclayer(self.workspace,self.layergroup)
         if detail:

@@ -3,6 +3,7 @@ import collections
 import os
 import string
 import requests
+import urllib.parse
 
 from .mixins import *
 from .exceptions import *
@@ -28,6 +29,10 @@ class GeoserverUtils(object):
         return result if result else text
     
     @staticmethod
+    def urlencode(s):
+        return urllib.parse.quote(s)
+
+    @staticmethod
     def contenttype_header(f = "xml"):
         if f == "xml":
             return {"content-type": "application/xml"}
@@ -37,6 +42,8 @@ class GeoserverUtils(object):
             return {"content-type": "image/jpeg"}
         elif f == "png":
             return {"content-type": "image/png"}
+        elif f in ("gpkg","geopackage"):
+            return {"content-type": "application/x-sqlite3"}
         elif "/" in f:
             return {"content-type": f}
         else:
@@ -67,11 +74,7 @@ class GeoserverUtils(object):
                 response=res
             )
         elif res.status_code == 404:
-            raise ResourceNotFound(
-                """URL: {0}
-{1}: Resource Not Found""".format(res.request.url,res.status_code),
-                response=res
-            )
+            raise ResourceNotFound(res)
         elif res.status_code >= 400:
             try:
                 res.raise_for_status()
@@ -81,7 +84,7 @@ class GeoserverUtils(object):
 {2}""".format(res.request.url,str(ex),res.text)
                 raise ex.__class__(msg,response=res)
 
-class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMixin,LayergroupMixin,ReloadMixin,SecurityMixin,StyleMixin,WMSLayerMixin,WMSStoreMixin,WorkspaceMixin,UsergroupMixin,GeoserverUtils):
+class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMixin,LayergroupMixin,ReloadMixin,SecurityMixin,StyleMixin,WMSLayerMixin,WMSStoreMixin,WorkspaceMixin,UsergroupMixin,RolesMixin,GeoserverUtils):
     def __init__(self,geoserver_url,username,password,headers=None):
         assert geoserver_url,"Geoserver URL is not configured"
         assert username,"Geoserver user is not configured"
@@ -93,6 +96,7 @@ class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMi
 
 
     def get(self,url,headers=GeoserverUtils.accept_header("json"),timeout=settings.REQUEST_TIMEOUT,error_handler=None):
+        logger.debug("GET {}".format(url))
         if self.headers:
             headers = collections.ChainMap(headers,self.headers)
         res = requests.get(url , headers=headers, auth=(self.username,self.password),timeout=timeout)
@@ -107,6 +111,7 @@ class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMi
             return False
 
     def post(self,url,data,headers=GeoserverUtils.contenttype_header("xml"),timeout=settings.REQUEST_TIMEOUT,error_handler=None):
+        logger.debug("POST {}".format(url))
         if self.headers:
             headers = collections.ChainMap(headers,self.headers)
         res = requests.post(url , data=data , headers=headers, auth=(self.username,self.password),timeout=timeout)
@@ -114,6 +119,7 @@ class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMi
         return res
 
     def put(self,url,data,headers=GeoserverUtils.contenttype_header("xml"),timeout=settings.REQUEST_TIMEOUT,error_handler=None):
+        logger.debug("PUT {}".format(url))
         if self.headers:
             headers = collections.ChainMap(headers,self.headers)
         res = requests.put(url , data=data , headers=headers, auth=(self.username,self.password),timeout=timeout)
@@ -121,6 +127,7 @@ class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMi
         return res
 
     def delete(self,url,headers=None,timeout=settings.REQUEST_TIMEOUT,error_handler=None):
+        logger.debug("DELETE {}".format(url))
         if self.headers:
             headers = collections.ChainMap(headers,self.headers)
         res = requests.delete(url , auth=(self.username,self.password),headers=headers,timeout=timeout)

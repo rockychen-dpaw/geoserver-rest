@@ -132,7 +132,7 @@ class FeturetypeTest(BaseTest):
                 "testft4unitest",
                 {
                     "title":"test feature type",
-                    "description":"for unitest",
+                    "abstract":"for unitest",
                     "keywords":["unitest"],
                     "srs":"EPSG:4326",
                     "nativeName":os.environ["POSTGIS_TABLE"]
@@ -141,7 +141,7 @@ class FeturetypeTest(BaseTest):
                 "testview4unitest",
                 {
                     "title":"test feature type",
-                    "description":"for unitest",
+                    "abstract":"for unitest",
                     "keywords":["unitest"],
                     "srs":"EPSG:4326",
                     "viewsql":"select * from {}".format(os.environ["POSTGIS_TABLE"]),

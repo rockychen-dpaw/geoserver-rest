@@ -90,6 +90,26 @@ class DatastoreMixin(object):
     
     def datastore_url(self,workspace,storename):
         return "{0}/rest/workspaces/{1}/datastores/{2}".format(self.geoserver_url,workspace,storename)
+
+    def upload_dataset_url(self,workspace,storename,filename,method="file",dataformat=None,update="overwrite",configure="none"):
+        """
+        method : The upload method. Can be "url", "file", "external". “file” uploads a file from a local source. The body of the request is the file itself. “url” uploads a file from an remote source. The body of the request is a URL pointing to the file to upload. This URL must be visible from the server. “external” uses an existing file on the server. The body of the request is the absolute path to the existing file.
+        dataformat: The type of source data store (e.g., “shp”).
+        filename: The target file name for the file to be uploaded
+        configure: The configure parameter can take one of the following values:
+          first: (Default) Sets up only the first feature type available in the data store.
+          none: Does not configure any feature types.
+          all: Configures all feature types. 
+        """
+        if not dataformat:
+            if datasetname.rsplit(".",1)[1].lower() in ("gpkg","geopackage"):
+                dataformat = "gpkg"
+            elif datasetname.rsplit(".",1)[1].lower() in ("zip","shp"):
+                dataformat = "shp"
+            else:
+                raise Exception("Can't determine the data format'")
+        return "{0}/rest/workspaces/{1}/datastores/{2}/{4}.{5}?filename={3}&update={6}&configure={7}".format(self.geoserver_url,workspace,storename,filename,method,dataformat,update,configure)
+
     
     def has_datastore(self,workspace,storename):
         return self.has(self.datastore_url(workspace,storename))
@@ -101,6 +121,26 @@ class DatastoreMixin(object):
         res = self.get(self.datastores_url(workspace), headers=self.accept_header("json"))
     
         return [str(d["name"]) for d in (res.json().get("dataStores") or {}).get("dataStore") or [] ]
+
+    def upload_dataset(self,workspace,storename,file,filename=None,dataformat=None,update="overwrite"):
+        """
+        Upload the dataset and create the datastore it doesn't exist
+        """
+        if not dataformat:
+            if file.rsplit(".",1)[1].lower() in ("gpkg","geopackage"):
+                dataformat = "gpkg"
+            elif file.rsplit(".",1)[1].lower() in ("zip","shp"):
+                dataformat = "shp"
+            else:
+                raise Exception("Can't determine the data format'")
+        if not filename:
+            filename = os.path.split(file)[1]
+
+        with open(file,'rb') as f:
+            res = self.put(
+                self.upload_dataset_url(workspace,storename,filename,method="file",dataformat=dataformat,update=update),
+                f,
+                headers=self.contenttype_header(dataformat),timeout=600)
 
     def update_datastore(self,workspace,storename,parameters,create=None):
         """

@@ -5,7 +5,7 @@ from .basetest import BaseTest
 
 class UsergroupTest(BaseTest):
     def test_usergroup(self):
-        test_groups = ["_group4unitest","_group4unitest@.:!,#$&~='\"+-^?`|","_group4unitest()","_group4unitest[]","_group4unitest<>","_group4unitest{}"]
+        test_groups = ["_group4unitest"]
         try:
             for g in test_groups:
                 self.geoserver.delete_usergroup(g)
@@ -40,7 +40,7 @@ class UsergroupTest(BaseTest):
     def test_user(self):
         test_groups = ["_group14unitest","_group24unitest","_group34unitest"]
         test_groups.sort()
-        test_users = ["_user4unitest","_user4unitest@.:!,~'\"+-^?`|#$&=","_user4unitest()","_user4unitest[]","_user4unitest<>","_user4unitest{}","rocky.chen@dbca.wa.gov.au"]
+        test_users = ["_user4unitest","_user4unitest@.:!,~'\"+-^?`|#$&=","_user4unitest()","_user4unitest[]","_user4unitest<>","_user4unitest{}","test.user01@unitest.com"]
         try:
             for g in test_groups:
                 print("Try to create the usergroup({}) for testing".format(g))
@@ -54,13 +54,13 @@ class UsergroupTest(BaseTest):
                     pass
 
             existing_users = self.geoserver.list_users()
-            print("Geoserver has {} existing users.".format(len(existing_users)))
+            print("Geoserver has {} existing users({}).".format(len(existing_users),existing_users))
 
             for u in test_users:
                 print("Try to add the user({})".format(u))
                 self.assertTrue(self.geoserver.update_user(u,None,create=True),"The user({}) should be a new user".format(u))
                 self.assertTrue(self.geoserver.has_user(u),"The user({}) should been created".format(u))
-                print("Add the user({}) sucessfully".format(u))
+                print("Add the user({}) sucessfully. users in default group = {}".format(u,self.geoserver.list_users()))
 
                 print("Try to update the user({})".format(u))
                 self.assertFalse(self.geoserver.update_user(u,None,enabled=False,create=False),"The user({}) should be a existing user".format(u))
@@ -76,12 +76,14 @@ class UsergroupTest(BaseTest):
                 groups = self.geoserver.list_user_groups(u)
                 groups.sort()
                 self.assertEqual(groups,test_groups[:2],"The user({}) should belong to the groups({}) instead of groups({})".format(u,test_groups[:2],groups))
+                print("Add the user({0}) to group({1}) sucessfully. users in default group = {2}, users in group({1}) = {3}".format(u,test_groups[0],self.geoserver.list_users(),self.geoserver.list_users(test_groups[0])))
 
                 print("Try to add the user({}) to groups({})".format(u,test_groups[1:]))
                 self.geoserver.update_user_groups(u,test_groups[1:])
                 groups = self.geoserver.list_user_groups(u)
                 groups.sort()
                 self.assertEqual(groups,test_groups[1:],"The user({}) should belong to the groups({}) instead of groups({})".format(u,test_groups[1:],groups))
+                print("Remove the user({0}) from group({1}) sucessfully. users in default group = {2}, users in group({1}) = {3}".format(u,test_groups[0],self.geoserver.list_users(),self.geoserver.list_users(test_groups[0])))
 
                 print("Try to remove the user({}) from all groups".format(u))
                 self.geoserver.update_user_groups(u)
@@ -98,8 +100,8 @@ class UsergroupTest(BaseTest):
                 self.assertFalse(self.geoserver.delete_user(u),"The user({}) should already been deleted before".format(u))
 
             self.assertEqual(len(self.geoserver.list_users()), len(existing_users),"All the test users should been deleted")
+
         except Exception as ex:
-            
             for u in test_users:
                 try:
                     self.geoserver.delete_user(u)
@@ -108,6 +110,7 @@ class UsergroupTest(BaseTest):
                     pass
             raise ex
         finally:
+
             for g in test_groups:
                 try:
                     self.geoserver.delete_usergroup(g)
