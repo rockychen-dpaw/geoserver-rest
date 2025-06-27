@@ -10,31 +10,30 @@ from ..exceptions import *
 from .. import settings
 
 logger = logging.getLogger(__name__)
+    
+TRUNCATE_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+<truncateLayer>
+    <layerName>{}:{}</layerName>
+</truncateLayer>
+"""
 
 LAYER_DATA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
     <GeoServerLayer>
         <name>{0}:{1}</name>
-        <mimeFormats>
-            {2}
-        </mimeFormats>
-        <enabled>true</enabled>
-        <inMemoryCached>true</inMemoryCached>
-        <gridSubsets>
-            {3}
-        </gridSubsets>
-        <metaWidthHeight>
-            <int>{4}</int>
-            <int>{5}</int>
-        </metaWidthHeight>
+        <mimeFormats>{2}</mimeFormats>
+        <gridSubsets>{3}</gridSubsets>
+        <metaWidthHeight><int>{4}</int><int>{5}</int></metaWidthHeight>
         <expireCache>{6}</expireCache>
         <expireClients>{7}</expireClients>
+        <gutter>{8}</gutter>
+        <enabled>{9}</enabled>
+        <inMemoryCached>true</inMemoryCached>
         <parameterFilters>
             <styleParameterFilter>
                 <key>STYLES</key>
                 <defaultValue></defaultValue>
             </styleParameterFilter>
         </parameterFilters>
-        <gutter>{8}</gutter>
     </GeoServerLayer>
 """
 EMPTY_LAYER_TEMPLATE="""<?xml version="1.0" encoding="UTF-8"?>
@@ -205,6 +204,10 @@ class GWCMixin(object):
     def gwclayer_seed_url(self,workspace,layername):
         return "{0}/gwc/rest/seed/{1}:{2}.xml".format(self.geoserver_url,workspace,layername)
 
+    def gwclayer_truncate_url(self,workspace,layername,requestType="truncateLayer"):
+        #return "{0}/gwc/rest/masstruncate?requestType={2}&layer={1}".format(self.geoserver_url,self.urlencode("{}:{}".format(workspace,layername)),requestType)
+        return "{0}/gwc/rest/masstruncate".format(self.geoserver_url)
+
     def wmtsservice_url(self,workspace,layername):
         return "{0}/gwc/service/wmts".format(self.geoserver_url,layername)
 
@@ -277,11 +280,8 @@ class GWCMixin(object):
         """
         Return a json object if exists; otherwise return None
         """
-        try:
-            res = self.get(self.gwclayer_url(workspace,layername) , headers=self.accept_header("json"),error_handler=self._handle_gwcresponse_error)
-            return res.json().get("GeoServerLayer")
-        except ResourceNotFound as ex:
-            return None
+        res = self.get(self.gwclayer_url(workspace,layername) , headers=self.accept_header("json"),error_handler=self._handle_gwcresponse_error)
+        return res.json().get("GeoServerLayer")
             
     def delete_gwclayer(self,workspace,layername):
         if self.has_gwclayer(workspace,layername):
@@ -303,12 +303,22 @@ class GWCMixin(object):
         expireCache: optional, default 0
         expireClients: optional, default 0
         gutter: optional, default 100
+        enabled: optional, default True
         """
         if is_featuretype is None:
             is_featuretype = self.has_featuretype(workspace,layername)
         formats = parameters.get("mimeFormats",["image/png","image/jpeg"])
         if is_featuretype:
             formats = itertools.chain(formats,["application/json;type=geojson","application/json;type=topojson","application/x-protobuf;type=mapbox-vector","application/json;type=utfgrid"])
+
+        gridSubsets = parameters.get("gridSubsets",[{"name":"gda94"},{"name":"mercator"}])
+        metaWidth = parameters.get("metaWidth",1)
+        metaHeight = parameters.get("metaHeight",1)
+        expireCache = parameters.get("expireCache",0)
+        expireClients = parameters.get("expireClients",0)
+        gutter = parameters.get("gutter",100)
+        enabled = parameters.get("enabled",True)
+
         layer_data = LAYER_DATA_TEMPLATE.format(
             workspace,
             layername,
@@ -318,43 +328,24 @@ class GWCMixin(object):
                 EXTENT_TEMPLATE.format(*f.get("extent")) if f.get("extent") else "",
                 ZOOMSTART_TEMPLATE.format(f.get("zoomStart")) if f.get("zoomStart") is not None else "",
                 ZOOMSTOP_TEMPLATE.format(f.get("zoomStop")) if f.get("zoomStop") is not None else ""
-            ) for f in parameters.get("gridSubsets",[{"name":"gda94"},{"name":"mercator"}])),
-            parameters.get("metaWidth",1),
-            parameters.get("metaHeight",1),
-            parameters.get("expireCache",0),
-            parameters.get("expireClients",0),
-            parameters.get("gutter",100)
+            ) for f in gridSubsets),
+            metaWidth, 
+            metaHeight,
+            expireCache,
+            expireClients,
+            gutter,
+            "true" if enabled else "false"
         )
+        logger.debug("wmts layer data:\n{}".format(layer_data))
     
         res = self.put(self.gwclayer_url(workspace,layername,f="xml"), headers=self.contenttype_header("xml"), data=layer_data,error_handler=self._handle_gwcresponse_error)
         logger.debug("Succeed to update the gwc layer({}:{}). ".format(workspace,layername))
     
-    def empty_gwclayer(self,workspace,layername,gridsubsets=["gda94","mercator"],formats=["image/png","image/jpeg"]):
-        for gridset in gridsubsets:
-            for f in formats:
-                layer_data = EMPTY_LAYER_TEMPLATE.format(
-                    workspace,
-                    layername,
-                    gridset,
-                    f
-                )
-                res = self.post(self.gwclayer_seed_url(workspace,layername),headers=collections.ChainMap(self.accept_header("json"),self.contenttype_header("xml")), data=layer_data,error_handler=self._handle_gwcresponse_error)
-    
-        #check whether the task is finished or not.
-        finished = False
-        while(finished):
-            finished = True
-            res = self.get(self.gwclayer_url(workspace,layername), headers=self.accept_header("json"),error_handler=self._handle_gwcresponse_error)
-            tasks = res.json().get("long-array-array",[])
-            for t in tasks:
-                if t[3] == -1:
-                    #aborted
-                    raise Exception("Failed to empty the cache of the gwc layer({}:{}). some tasks are aborted".format(workspace,layername))
-                elif t[3] in (0,1):
-                    finished = False
-                    break
-            if not finished:
-                time.sleep(1)
+    def empty_gwclayer(self,workspace,layername):
+        self.post(
+            self.gwclayer_truncate_url(workspace,layername),
+            TRUNCATE_TEMPLATE.format(workspace,layername),
+            headers={'content-type': 'text/xml'})
 
     def get_tileposition(self,x,y,zoom,gridset=settings.GWC_GRIDSET):
         return GridsetUtil.get_instance(self.get_gridset(gridset)["srs"]).get_tile(x,y,zoom)
@@ -401,4 +392,42 @@ class GWCMixin(object):
             return outputfile
         finally:
             output.close()
+
+    def get_gwclayer_field(self,layerdata,field):
+        """
+        field:
+            name
+            id
+            enabled:
+            gridSubsets: list of dict({name,extent(optional),zoomStart(optional),zoomStop(optional)})
+            expireCache
+            expireClients
+            gutter
+            metaWidthHeight
+
+        <gridSubsets>
+            {3}
+        </gridSubsets>
+        """
+        if field == "gridSubsets":
+            gridsets = []
+            for data in layerdata.get("gridSubsets",[]):
+                gridset = {
+                    "name":data["gridSetName"]
+                }
+                if "extent" in data:
+                    gridset["extent"] = data["extent"]["coords"]
+                if "zoomStart" in data:
+                    gridset["zoomStart"] = data["zoomStart"]
+                if "zoomStop" in data:
+                    gridset["zoomStop]"] = data["zoomStop"]
+                gridsets.append(gridset)
+            return gridsets
+        elif field == "metaWidth":
+            return layerdata.get("metaWidthHeight",[None,None])[0]
+        elif field == "metaHeight":
+            return layerdata.get("metaWidthHeight",[None,None])[1]
+        else:
+            return layerdata.get(field)
+
     

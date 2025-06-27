@@ -73,8 +73,14 @@ class GeoserverUtils(object):
 {1}: No permission to access this resource.""".format(res.request.url,res.status_code),
                 response=res
             )
+        elif res.status_code == 401:
+            raise UnauthenticatedException(res)
+        elif res.status_code == 403:
+            raise UnauthorizedException(res)
         elif res.status_code == 404:
             raise ResourceNotFound(res)
+        elif res.status_code == 405:
+            raise HttpMethodNotSupport(res)
         elif res.status_code >= 400:
             try:
                 res.raise_for_status()

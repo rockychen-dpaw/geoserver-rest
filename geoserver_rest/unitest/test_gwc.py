@@ -50,11 +50,16 @@ class WMSLayerTest(BaseTest):
                 "metaWidth":1,
                 "metaHeight":1,
                 "expireCache":300,
-                "expireClients":300
+                "expireClients":300,
+                "enabled":True
             }
             print("Try to create the gwc cache layer for layer({})".format(test_layername))
             self.geoserver.update_gwclayer(test_workspace,test_layername,parameters)
             self.assertTrue(self.geoserver.has_gwclayer(test_workspace,test_layername),"The gwc cache layer for the layer({}) should have been created".format(test_layername))
+            layerdata = self.geoserver.get_gwclayer(test_workspace,test_layername)
+            for field in ("metaWidth","metaHeight","expireCache","expireClients","enabled"):
+                self.assertEqual(str(self.geoserver.get_gwclayer_field(layerdata,field)),str(parameters[field]),"The field({2}) of the gwc layer ({0}:{1}) should should be {3} instead of {4}".format(test_workspace,test_layername,field,str(parameters[field]),str(self.geoserver.get_gwclayer_field(layerdata,field))))
+
             test_gwclayer = self.geoserver.get_gwclayer(test_workspace,test_layername)
             self.assertEqual(test_gwclayer["mimeFormats"],parameters["mimeFormats"],"The mimeFormat of the gwc cache layer for the layer({}) should have be {} instead of {}".format(test_layername,parameters["mimeFormats"],test_gwclayer["mimeFormats"]))
             self.assertEqual(len(self.geoserver.list_gwclayers(test_workspace)),1,"The workspace({}) should only contain one gwc cache layer".format(test_workspace))
@@ -63,16 +68,25 @@ class WMSLayerTest(BaseTest):
             print("Try to update the gwc cache layer for layer({})".format(test_layername))
             parameters["gridSubsets"][0]["extent"] = self.BBOX_AUSTRALIA
             parameters["mimeFormats"] = ["image/png","image/jpeg"]
+            parameters["metaWidth"] = 10
+            parameters["metaHeight"] = 10
+            parameters["expireCache"] = 600
             self.geoserver.update_gwclayer(test_workspace,test_layername,parameters)
             test_gwclayer = self.geoserver.get_gwclayer(test_workspace,test_layername)
             test_gridset = next(d for d in test_gwclayer["gridSubsets"] if d["gridSetName"] == parameters["gridSubsets"][0]["name"])
             self.assertTrue(self.geoserver.has_gwclayer(test_workspace,test_layername),"The gwc cache layer for the layer({}) should have been created".format(test_layername))
             self.assertTrue(utils.has_samedata(test_gwclayer["mimeFormats"],parameters["mimeFormats"]),"The mimeFormats of the gwc cache layer for the layer({}) should have the value ({}) instead of {} ".format(test_layername,parameters["mimeFormats"],test_gwclayer["mimeFormats"]))
             self.assertEqual(list(test_gridset["extent"]["coords"]),list(parameters["gridSubsets"][0]["extent"]),"The gridset extent of the gwc cache layer for the layer({}) should have the value ({}) instead of {} ".format(test_layername,parameters["gridSubsets"][0]["extent"],test_gridset["extent"]["coords"]))
+            layerdata = self.geoserver.get_gwclayer(test_workspace,test_layername)
+            for field in ("metaWidth","metaHeight","expireCache","expireClients","enabled"):
+                self.assertEqual(str(self.geoserver.get_gwclayer_field(layerdata,field)),str(parameters[field]),"The field({2}) of the gwc layer ({0}:{1}) should should be {3} instead of {4}".format(test_workspace,test_layername,field,str(parameters[field]),str(self.geoserver.get_gwclayer_field(layerdata,field))))
+
             print("Update the gwc cache layer for layer({}) successfully".format(test_layername))
 
+
             print("Try to empty the gwc cache layer for layer({})".format(test_layername))
-            self.geoserver.empty_gwclayer(test_workspace,test_layername,gridsubsets=["gda94","mercator"],formats=["image/png","image/jpeg"])
+            self.geoserver.empty_gwclayer(test_workspace,test_layername)
+
             
             print("Try to delete the gwc cache layer for layer({})".format(test_layername))
             self.geoserver.delete_gwclayer(test_workspace,test_layername)

@@ -83,13 +83,10 @@ class LayergroupMixin(object):
             "dateCreated": "2025-06-18 00:47:24.331 UTC"
         }
         """
-        try:
-            res = self.get(self.layergroup_url(workspace,groupname),headers=self.accept_header("json"))
-            return res.json()["layerGroup"]
-        except ResourceNotFound as ex:
-            return None
+        res = self.get(self.layergroup_url(workspace,groupname),headers=self.accept_header("json"))
+        return res.json()["layerGroup"]
     
-    def get_layergroupfield(self,layergroupdict,field):
+    def get_layergroup_field(self,layergroupdata,field):
         """
         field: 
            layers: Return list of tuple (type,workspace,name)
@@ -102,23 +99,17 @@ class LayergroupMixin(object):
         Return the value of field from layergroup json data
         """
         if field == "layers":
-            return [ (layer["@type"],*layer["name"].split(":",1)) if ":" in layer["name"] else (layer["@type"],layergroupdict["workspace"]["name"],layer["name"]) for layer in layergroupdict.get("publishables",{}).get("published",[])]
+            return [ (layer["@type"],*layer["name"].split(":",1)) if ":" in layer["name"] else (layer["@type"],layergroupdata["workspace"]["name"],layer["name"]) for layer in layergroupdata.get("publishables",{}).get("published",[])]
         elif field == "workspace":
-            return layergroupdict["workspace"]["name"]
+            return layergroupdata["workspace"]["name"]
         elif field == "keywords":
-            result = layergroupdict["keywords"]["string"]
+            result = layergroupdata["keywords"]["string"]
             if result:
                 return [result] if isinstance(result,str) else result
             else:
                 return []
-        elif field == "bounds":
-            return layergroupdict["bounds"]
-        elif field == "name":
-            return layergroupdict["name"]
-        elif field == "title":
-            return layergroupdict["title"]
         else:
-            raise Exception("Not Support")
+            return layergroupdata[field]
     
     def list_layergroups(self,workspace):
         """

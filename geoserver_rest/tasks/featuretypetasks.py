@@ -140,7 +140,7 @@ class GetFeatureTypeDetail(Task):
                 result["latLonBoundingBox"]["maxy"], result["latLonBoundingBox"]["maxx"] = transformer.transform(result["latLonBoundingBox"]["maxy"], result["latLonBoundingBox"]["maxx"])
 
         #get the feature styles
-        styles = geoserver.get_layer_styles(self.workspace,self.featuretype)
+        styles = geoserver.get_featuretype_styles(self.workspace,self.featuretype)
         result["defaultStyle"] = (":".join(styles[0]) if styles[0][0] else styles[0][1]) if styles else None
         result["alternativeStyles"] = [("{}:{}".format(w,style) if w else style)  for w,style in styles[1]] if styles and styles[1] else []
         result["alternativeStyles"].sort()

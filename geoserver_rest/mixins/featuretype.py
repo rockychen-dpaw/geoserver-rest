@@ -284,9 +284,9 @@ class FeaturetypeMixin(object):
     
         logger.debug("Succeed to publish the featuretype({}:{})".format(workspace,layername))
     
-    def get_layer_styles(self,workspace,layername):
+    def get_featuretype_styles(self,workspace,layername):
         """
-        Return a tuple(default style, alternate styles); 
+        Return a tuple(default style, [] or alternate styles); 
         Raise ResourceNotFound if layername doesn't exist
         """
         res = self.get(self.layer_styles_url(workspace,layername),headers=self.accept_header("json"))
@@ -298,16 +298,48 @@ class FeaturetypeMixin(object):
                 [d["name"].split(":") if ":" in d["name"] else [None,d["name"]] for d in data["layer"].get("styles",{}).get("style",[])])
         else:
             style = data["layer"].get("styles",{}).get("style")
-            return (
-                default_style.split(":") if default_style and ":" in default_style else (None,default_style), 
-                [style["name"].split(":") if ":" in style["name"] else [None,style["name"]]])
+            if style:
+                return (
+                    default_style.split(":") if default_style and ":" in default_style else (None,default_style), 
+                    [style["name"].split(":") if ":" in style["name"] else [None,style["name"]]])
+            else:
+                return (
+                    default_style.split(":") if default_style and ":" in default_style else (None,default_style), 
+                    [])
     
-    def set_layer_styles(self,workspace,layername,default_style,styles):
+    def set_featuretype_styles(self,workspace,layername,defaultstyle,styles):
         layer_styles_data = LAYER_STYLES_TEMPLATE.format(
-            DEFAULT_STYLE_TEMPLATE.format(default_style) if default_style else "",
+            DEFAULT_STYLE_TEMPLATE.format(defaultstyle) if defaultstyle else "",
             os.linesep.join(STYLE_TEMPLATE.format(n) for n in styles) if styles else ""
         )
         res = self.put(self.layer_styles_url(workspace,layername),headers=self.contenttype_header("xml"),data=layer_styles_data)
     
-        logger.debug("Succeed to set the styles of the layer({}:{}),default_style={}, styles={}".format(workspace,layername,default_style,styles))
+        logger.debug("Succeed to set the styles of the layer({}:{}),default_style={}, styles={}".format(workspace,layername,defaultstyle,styles))
     
+    def get_featuretype_field(self,featuretypedata,field):
+        """
+        field:
+            name:
+            enabled:
+            nativename
+            title
+            abstract
+            keywords: list of string
+            srs
+            nativeBoundingBox: dict(minx,miny,maxx,mzxy,crs)
+            latLonBoundingBox: dict(minx,miny,maxx,mzxy,crs)
+            namespace/workspace
+            datastore related parameters
+
+        Get the wms field from wms json data, returned by get_wmsstore
+        """
+        if field in ("namespace","workspace"):
+            return featuretypedata.get("namespace",{}).get("name")
+        elif field == "keywords":
+            data = featuretypedata.get("keywords",{}).get("string")
+            if not data:
+                return []
+            else:
+                return [data] if isinstance(data,str) else data
+        else:
+            return featuretypedata.get(field)

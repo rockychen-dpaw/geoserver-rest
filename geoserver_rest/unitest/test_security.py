@@ -43,29 +43,42 @@ class SecurityTest(BaseTest):
                 del original_rules[k]
             self.geoserver.update_layer_access_rules(original_rules)
 
+        latest_rules = dict(original_rules)
         try:
             print("Add the testing rules for testing workspaces")
-            new_rules = dict(original_rules)
+            new_rules = dict()
             for w in test_workspaces[:-1]:
                 new_rules["{}.*.r".format(w)] = "*"
                 new_rules["{}.*.w".format(w)] = "NO_ONE"
-            self.geoserver.update_layer_access_rules(new_rules)
+            self.geoserver.patch_layer_access_rules(new_rules)
+            latest_rules.update(new_rules)
             rules = self.geoserver.get_layer_access_rules()
-            self.assertEqual(rules,new_rules,"The layer access rules({1}) of the geoserver({0}) is not equal with the expected rules({2}) ".format(self.geoserver.geoserver_url,rules,new_rules))
+            self.assertEqual(rules,latest_rules,"The layer access rules({1}) of the geoserver({0}) is not equal with the expected rules({2}) ".format(self.geoserver.geoserver_url,rules,new_rules))
+            print("Succeed to patch the access rules:patched rules = {}".format(new_rules))
 
             print("Add/update/delete the testing rules for testing workspaces")
             #delete the layer access rules for first testing workspace
+            delete_permissions = []
+            delete_permissions.append("{}.*.r".format(test_workspaces[0]))
             del new_rules["{}.*.r".format(test_workspaces[0])]
+            del latest_rules["{}.*.r".format(test_workspaces[0])]
+
+            delete_permissions.append("{}.*.w".format(test_workspaces[0]))
             del new_rules["{}.*.w".format(test_workspaces[0])]
+            del latest_rules["{}.*.w".format(test_workspaces[0])]
+
             #update the layer access rules for second testing workspace
             new_rules["{}.*.r".format(test_workspaces[1])] = "NO_ONE"
             new_rules["{}.*.w".format(test_workspaces[1])] = "*"
             #add the layer access rules for the last testing workspace
             new_rules["{}.*.r".format(test_workspaces[-1])] = "*"
             new_rules["{}.*.w".format(test_workspaces[-1])] = "NO_ONE"
-            self.geoserver.update_layer_access_rules(new_rules)
+
+            latest_rules.update(new_rules)
+            self.geoserver.patch_layer_access_rules(new_rules,delete_permissions=delete_permissions)
             rules = self.geoserver.get_layer_access_rules()
-            self.assertEqual(rules,new_rules,"The layer access rules({1}) of the geoserver({0}) is not equal with the expected rules({2}) ".format(self.geoserver.geoserver_url,rules,new_rules))
+            self.assertEqual(rules,latest_rules,"The layer access rules({1}) of the geoserver({0}) is not equal with the expected rules({2}) ".format(self.geoserver.geoserver_url,rules,new_rules))
+            print("Succeed to patch the access rules:patched rules = {} , delete_permissions = {}".format(new_rules,delete_permissions))
 
         finally:
             print("Set the layer access rules to original rules {}".format(original_rules))

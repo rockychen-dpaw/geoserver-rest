@@ -114,6 +114,9 @@ class DatastoreMixin(object):
     def has_datastore(self,workspace,storename):
         return self.has(self.datastore_url(workspace,storename))
     
+    def get_datastore(self,workspace,storename):
+        return self.get(self.datastore_url(workspace,storename)).json().get("dataStore",{})
+
     def list_datastores(self,workspace):
         """
         Return the list of datastores
@@ -204,3 +207,20 @@ class DatastoreMixin(object):
         logger.debug("Succeed to delete the datastore({}:{})".format(workspace,storename))
         return True
     
+    def get_datastore_field(self,storedata,field):
+        """
+        field:
+            name:
+            enabled:
+            description:
+            workspace
+            datastore related parameters
+
+        Get the wms field from wms json data, returned by get_wmsstore
+        """
+        if field == "workspace":
+            return storedata.get("workspace",{}).get("name")
+        elif field == "description":
+            return storedata.get("description")
+        else:
+            return next((item['$'] for item in storedata.get("connectionParameters",{}).get("entry",[]) if item['@key'] == field)  ,None)

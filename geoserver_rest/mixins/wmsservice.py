@@ -20,9 +20,12 @@ class WMSServiceMixin(object):
 
     def get_map(self,workspace,layername,bbox,version="1.1.0",srs="EPSG:4326",width=1024,height=1024,format="image/jpeg",style="",outputfile=None):
         """
+        bbox is [minx,miny,maxx,maxy]
         outputfile: a temporary file will be created if outputfile is None, the client has the responsibility to delete the outputfile,
         If succeed, save the image to outputfile
         """
+        if isinstance(bbox,dict):
+            bbox = [bbox["minx"],bbox["miny"],bbox["maxx"],bbox["maxy"]]
         url = self.map_url(workspace,layername,bbox,version=version,srs=srs,width=width,height=height,format=format,style=style)
         logger.debug("get map url = {}".format(url))
         res = self.get(url,headers=self.accept_header(format),timeout=settings.WMS_TIMEOUT)

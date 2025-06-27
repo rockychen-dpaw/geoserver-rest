@@ -123,6 +123,12 @@ def get_bbox(coordinates):
                 bbox[3] = coord[1]
 
     return None if any(c is None for c in bbox) else bbox
+
+def remove_file(f):
+    try:
+        os.remove(f)
+    except Exception as ex:
+        pass
                 
                 
 

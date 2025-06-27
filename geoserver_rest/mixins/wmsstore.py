@@ -33,16 +33,18 @@ class WMSStoreMixin(object):
         return self.has(self.wmsstore_url(workspace,storename),headers=self.accept_header("json"))
 
     def get_wmsstore(self,workspace,storename):
+        """"
+        Return wmsstore json data; raise ResourceNotFound if not found.
+        """
         res = self.get(self.wmsstore_url(workspace,storename),headers=self.accept_header("json"))
         return res.json().get("wmsStore")
 
-    def get_wmsstore_field(self,wmsdata,field):
+    def get_wmsstore_field(self,storedata,field):
         """
         field:
             name:
             enabled:
             workspace
-            capabilitiesURL:
             user
             maxConnections
             readTimeout
@@ -51,9 +53,9 @@ class WMSStoreMixin(object):
         Get the wms field from wms json data, returned by get_wmsstore
         """
         if field == "workspace":
-            return wmsdata.get("workspace",{}).get("name")
+            return storedata.get("workspace",{}).get("name")
         else:
-            return wmsdata.get(field)
+            return storedata.get(field)
     
     def list_wmsstores(self,workspace):
         res = self.get(self.wmsstores_url(workspace),headers=self.accept_header("json"))

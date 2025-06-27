@@ -197,3 +197,29 @@ class WMSLayerMixin(object):
             logger.debug("Succeed to update the wmslayer({}:{}:{}). ".format(workspace,storename,layername))
             return False
     
+    def get_wmslayer_field(self,layerdata,field):
+        """
+        field:
+            name:
+            enabled:
+            nativename
+            title
+            abstract
+            description
+            srs
+            nativeBoundingBox: dict(minx,miny,maxx,mzxy,crs)
+            latLonBoundingBox: dict(minx,miny,maxx,mzxy,crs)
+            namespace/workspace
+
+        Get the wms field from wms json data, returned by get_wmsstore
+        """
+        if field in ("namespace","workspace"):
+            return layerdata.get("namespace",{}).get("name")
+        elif field == "keywords":
+            data = layerdata.get("keywords",{}).get("string")
+            if not data:
+                return []
+            else:
+                return [data] if isinstance(data,str) else data
+        else:
+            return layerdata.get(field)

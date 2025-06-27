@@ -3,22 +3,31 @@ import collections
 import requests
 
 from ..exceptions import *
+from .. import settings
 
 logger = logging.getLogger(__name__)
 
 USER_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 <user>
 	<userName><![CDATA[{0}]]></userName>
-	<password>{1}</password>
-	<enabled>{2}</enabled>
+	{1}
+	{2}
 </user>
 """
+PASSWORD_TEMPLATE = "<password>{}</password>"
+ENABLED_TEMPLATE = "<enabled>{}</enabled>"
 
 class UsergroupMixin(object):
     """
     group don't support the chars % ; / \\ 
     user don't support the chars % ; / \\ <>
     """
+    def login_url(self):
+        """
+        Return True if login successfully; otherwise return False
+        """
+        return "{0}/rest".format(self.geoserver_url)
+
     def usergroups_url(self,service=None):
         """
         service: user group service. use the default user group service if service is None
@@ -59,7 +68,8 @@ class UsergroupMixin(object):
 
     def user_url(self,user,service=None):
         """
-        Get the user in user group service, if service is None, use the default user group service
+        modify/delete a user
+        if service is None, use the default user group service
         """
         if service:
             return "{0}/rest/security/usergroup/service/{1}/user/{2}".format(self.geoserver_url,service,self.urlencode(user))
@@ -125,20 +135,46 @@ class UsergroupMixin(object):
         Return list of users(username,enabled) in usergroup; if usergroup is None, return the user list in default user group
         """
         res = self.get(self.users_url(usergroup,service=service),headers=self.accept_header("json"))
+        print("***users={}".format(res.json()))
     
         return [(u["userName"],u["enabled"]) for u in (res.json().get("users") or [])]
 
     def has_user(self,user,service=None):
         return any(u for u in self.list_users(service=service) if u[0] == user)
 
-    def update_user(self,user,password,enabled=True,create=None,service=None):
+    def get_user(self,user,service=None):
+        try:
+            return next(u for u in self.list_users(service=service) if u[0] == user)
+        except StopIteration as ex:
+            return ObjectNotFound("The user({}) does not exist.".format(user))
+
+    def create_user(self,user,password,enable=True,service=None):
+        return self.update_user(user,password=password,enable=enable,create=True,service=service)
+
+    def enable_user(self,user,enable,service=None):
+        return self.update_user(user,password=None,enable=enable,create=False,service=service)
+
+    def change_userpassword(self,user,password,service=None):
+        return self.update_user(user,password=password,enable=None,create=False,service=service)
+
+    def update_user(self,user,password=None,enable=None,create=None,service=None):
         """
         create/update user
         Return True if added;otherwise return False if already exist
         """
-        user_data = USER_TEMPLATE.format(user,password or "" , "true" if enabled else "false")
         if create is None:
             create = False if self.has_user(user,service=service) else True
+
+        if create:
+            if enable is None:
+                enable = True
+            if password is None:
+                password = ""
+
+        user_data = USER_TEMPLATE.format(user,PASSWORD_TEMPLATE.format(password) if password is not None else "" , ENABLED_TEMPLATE.format("true" if enable else "false") if enable is not None else "")
+
+        print("****{} = {}".format(user,user_data))
+
         if create:
             res = self.post(self.users_url(service=service),user_data,headers=collections.ChainMap(self.accept_header("json"),self.contenttype_header("xml")))
             logger.debug("Succeed to add the user({}).".format(user))
@@ -159,12 +195,34 @@ class UsergroupMixin(object):
         except ResourceNotFound as ex:
             return False
 
+    def login(self,user,password):
+        if self.headers:
+            headers = collections.ChainMap(self.accept_header("json"),self.headers)
+        else:
+            headers = self.accept_header("json")
+        res = requests.get(self.login_url() , headers=headers, auth=(user,password),timeout=settings.REQUEST_TIMEOUT,allow_redirects=False)
+        if res.status_code == 401:
+            #authenticate failed
+            return False
+        elif res.status_code < 400 or res.status_code >=500:
+            #failed to authenticate the user
+            res.raise_for_status()
+        else:
+            #authenticated, but failed to process the request
+            return True
+
     def list_user_groups(self,user,service=None):
         try:
             res = self.get(self.user_groups_url(user,service=service),headers=self.accept_header("json"))
             return res.json().get("groups") or []
         except ResourceNotFound as ex:
             return []
+
+    def user_in_group(self,user,group,service=None):
+        """
+        Return True if user is in the group; otherwise return False
+        """
+        return any(True for d in self.list_user_groups(user,service=service) if d == group)
 
     def add_user_to_group(self,user,group,service=None):
         """

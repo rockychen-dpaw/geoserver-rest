@@ -84,7 +84,7 @@ class LayergroupTest(BaseTest):
             print("{}\n{}".format(test_groupname,json.dumps(layergroupdata,indent=4)))
 
             for key in ("workspace","name","title","bounds","keywords","layers"):
-                print("{} = {}".format(key,self.geoserver.get_layergroupfield(layergroupdata,key)))
+                print("{} = {}".format(key,self.geoserver.get_layergroup_field(layergroupdata,key)))
 
             parameters = {
                 "title": "test layergroup for unitest, changed",
@@ -101,11 +101,11 @@ class LayergroupTest(BaseTest):
             self.assertTrue(layergroupdata2,"The layergroup({}:{}) should have been created".format(test_workspace,test_groupname))
             print("{}\n{}".format(test_groupname,json.dumps(layergroupdata2,indent=4)))
 
-            self.assertEqual(self.geoserver.get_layergroupfield(layergroupdata2,"title"),parameters["title"],"The title({2}) of the layergroup({0}:{1}) should be '{3}'".format(test_workspace,test_groupname,self.geoserver.get_layergroupfield(layergroupdata2,"title"),parameters["title"]))
+            self.assertEqual(self.geoserver.get_layergroup_field(layergroupdata2,"title"),parameters["title"],"The title({2}) of the layergroup({0}:{1}) should be '{3}'".format(test_workspace,test_groupname,self.geoserver.get_layergroup_field(layergroupdata2,"title"),parameters["title"]))
 
-            self.assertEqual(self.geoserver.get_layergroupfield(layergroupdata2,"keywords"),parameters["keywords"],"The keywords({2}) of the layergroup({0}:{1}) should be '{3}'".format(test_workspace,test_groupname,self.geoserver.get_layergroupfield(layergroupdata2,"keywords"),parameters["keywords"]))
+            self.assertEqual(self.geoserver.get_layergroup_field(layergroupdata2,"keywords"),parameters["keywords"],"The keywords({2}) of the layergroup({0}:{1}) should be '{3}'".format(test_workspace,test_groupname,self.geoserver.get_layergroup_field(layergroupdata2,"keywords"),parameters["keywords"]))
 
-            self.assertEqual(self.geoserver.get_layergroupfield(layergroupdata2,"layers"),[("layer",test_workspace,layer["name"]) for layer in parameters["layers"]],"The keywords({2}) of the layergroup({0}:{1}) should be '{3}'".format(test_workspace,test_groupname,self.geoserver.get_layergroupfield(layergroupdata2,"keywords"),parameters["keywords"]))
+            self.assertEqual(self.geoserver.get_layergroup_field(layergroupdata2,"layers"),[("layer",test_workspace,layer["name"]) for layer in parameters["layers"]],"The keywords({2}) of the layergroup({0}:{1}) should be '{3}'".format(test_workspace,test_groupname,self.geoserver.get_layergroup_field(layergroupdata2,"keywords"),parameters["keywords"]))
 
             self.geoserver.delete_layergroup(test_workspace,test_groupname)
             self.assertTrue(not self.geoserver.has_layergroup(test_workspace,test_groupname),"The layergroup({}:{}) should have been deleted".format(test_workspace,test_groupname))

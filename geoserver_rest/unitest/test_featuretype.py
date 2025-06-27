@@ -154,6 +154,11 @@ class FeturetypeTest(BaseTest):
                 self.assertTrue(self.geoserver.has_featuretype(test_workspace,test_layername,storename=test_storename),"The layer({}:{}) should have been created".format(test_workspace,test_layername))
                 self.assertEqual(len(self.geoserver.list_featuretypes(test_workspace,test_storename)),1,"The workspace({}:{}) should only have one layer".format(test_workspace,test_storename))
                 self.assertEqual(len(self.geoserver.list_featuretypes(test_workspace)),1,"The workspace({}) should only have one layer".format(test_workspace))
+                featuretypedata = self.geoserver.get_featuretype(test_workspace,test_layername,test_storename)
+                for k in ("title","abstract","keywords"):
+                    v = parameters[k]
+                    self.assertEqual(self.geoserver.get_featuretype_field(featuretypedata,k),v if isinstance(v,list) else str(v),"The field({1}) of the datastore({0}) should be {3} instead of {2}".format(test_layername,k,v,self.geoserver.get_datastore_field(featuretypedata,k)))
+                
                 print("Create the testing feature type({}) successfully".format(test_layername))
                 print("Try to update the testing feature type({})".format(test_layername))
                 test_featuretype = self.geoserver.get_featuretype(test_workspace,test_layername,storename=test_storename)
@@ -168,8 +173,8 @@ class FeturetypeTest(BaseTest):
                 print("Update the testing feature type({}) successfully".format(test_layername))
     
                 print("Try to set the styles of the testing feature type({})".format(test_layername))
-                self.geoserver.set_layer_styles(test_workspace,test_layername,test_stylenames[0],test_stylenames[1:])
-                layer_styles = self.geoserver.get_layer_styles(test_workspace,test_layername)
+                self.geoserver.set_featuretype_styles(test_workspace,test_layername,test_stylenames[0],test_stylenames[1:])
+                layer_styles = self.geoserver.get_featuretype_styles(test_workspace,test_layername)
                 self.assertEqual(layer_styles[0][1],test_stylenames[0],"The default style of the testing feature type should be {0} instead of {1}".format(test_stylenames[0],layer_styles[0]))
                 layer_styles[1].sort(key=lambda o:o[1])
                 self.assertEqual([o[1] for o in layer_styles[1]],test_stylenames[1:],"The alternative styles of the testing feature type should be {0} instead of {1}".format(test_stylenames[1:],layer_styles[1]))

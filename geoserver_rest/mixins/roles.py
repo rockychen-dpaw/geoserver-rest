@@ -128,12 +128,25 @@ class RolesMixin(object):
         res = self.get("{}.json".format(self.user_roles_url(user)),headers=self.accept_header("json"))
         return res.json().get("roles",[])
 
+    def user_has_rule(self,user,role):
+        """
+        Return True if user has the role; otherwise return False
+        """
+        return any(True for r in self.get_user_roles(user) if r == role)
+
     def get_usergroup_roles(self,group):
         """
         Return the list of roles for user
         """
         res = self.get(self.usergroup_roles_url(group),headers=self.accept_header("json"))
         return res.json().get("roles",[])
+
+    def usergroup_has_rule(self,usergroup,role):
+        """
+        Return True if the usergroup has the role; otherwise return False
+        """
+        return any(True for r in self.get_usergroup_roles(usergroup) if r == role)
+
 
     def associate_role_with_user(self,role,user,service=None):
         """
