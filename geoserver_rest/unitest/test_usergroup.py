@@ -82,7 +82,7 @@ class UsergroupTest(BaseTest):
 
                 print("Try to add the user({}) to groups({})".format(u,test_groups[:2]))
                 self.geoserver.update_user_groups(u,test_groups[:2])
-                groups = self.geoserver.list_user_groups(u)
+                groups = self.geoserver.get_user_groups(u)
                 groups.sort()
                 self.assertEqual(groups,test_groups[:2],"The user({}) should belong to the groups({}) instead of groups({})".format(u,test_groups[:2],groups))
                 self.assertTrue(self.geoserver.user_in_group(u,test_groups[0]),"The user({}) should be in the group({})".format(u,test_groups[0]))
@@ -90,14 +90,14 @@ class UsergroupTest(BaseTest):
 
                 print("Try to add the user({}) to groups({})".format(u,test_groups[1:]))
                 self.geoserver.update_user_groups(u,test_groups[1:])
-                groups = self.geoserver.list_user_groups(u)
+                groups = self.geoserver.get_user_groups(u)
                 groups.sort()
                 self.assertEqual(groups,test_groups[1:],"The user({}) should belong to the groups({}) instead of groups({})".format(u,test_groups[1:],groups))
                 print("Remove the user({0}) from group({1}) sucessfully. users in default group = {2}, users in group({1}) = {3}".format(u,test_groups[0],self.geoserver.list_users(),self.geoserver.list_users(test_groups[0])))
 
                 print("Try to remove the user({}) from all groups".format(u))
                 self.geoserver.update_user_groups(u)
-                groups = self.geoserver.list_user_groups(u)
+                groups = self.geoserver.get_user_groups(u)
                 self.assertEqual(len(groups),0,"The user({}) should not belong to any group".format(u))
 
             users = self.geoserver.list_users()

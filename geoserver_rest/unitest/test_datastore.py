@@ -108,18 +108,18 @@ class DatastoreTest(BaseTest):
             print("list the datastores in workspace({})".format(test_workspace))
             self.assertEqual(len(self.geoserver.list_datastores(test_workspace)),1,"The workspace({}) should only have one datastore".format(test_workspace))
 
-            #print("Try to delete the datastore({})".format(storename))
-            #self.geoserver.delete_datastore(test_workspace,storename)
-            #self.assertFalse(self.geoserver.has_datastore(test_workspace,storename),"The datastore({}) should have been deleted".format(storename))
-            #print("Delete the datastore({}) successfully".format(storename))
+            print("Try to delete the datastore({})".format(storename))
+            self.geoserver.delete_datastore(test_workspace,storename)
+            self.assertFalse(self.geoserver.has_datastore(test_workspace,storename),"The datastore({}) should have been deleted".format(storename))
+            print("Delete the datastore({}) successfully".format(storename))
 
-            #print("list the datastores in workspace({})".format(test_workspace))
-            #self.assertEqual(len(self.geoserver.list_datastores(test_workspace)),0,"The workspace({}) should have no datastore".format(test_workspace))
+            print("list the datastores in workspace({})".format(test_workspace))
+            self.assertEqual(len(self.geoserver.list_datastores(test_workspace)),0,"The workspace({}) should have no datastore".format(test_workspace))
 
         finally:
             #delete the test workspace
-            #print("Delete the testing workspace({})".format(test_workspace))
-            #self.geoserver.delete_workspace(test_workspace,recurse=recurse)
+            print("Delete the testing workspace({})".format(test_workspace))
+            self.geoserver.delete_workspace(test_workspace,recurse=recurse)
             pass
 
 

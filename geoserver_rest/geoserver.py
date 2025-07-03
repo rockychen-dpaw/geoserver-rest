@@ -104,7 +104,10 @@ class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMi
     def get(self,url,headers=GeoserverUtils.accept_header("json"),timeout=settings.REQUEST_TIMEOUT,error_handler=None):
         logger.debug("GET {}".format(url))
         if self.headers:
-            headers = collections.ChainMap(headers,self.headers)
+            if headers:
+                headers = collections.ChainMap(headers,self.headers)
+            else:
+                headers = self.headers
         res = requests.get(url , headers=headers, auth=(self.username,self.password),timeout=timeout)
         (error_handler or self._handle_response_error)(res)
         return res
@@ -119,7 +122,10 @@ class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMi
     def post(self,url,data,headers=GeoserverUtils.contenttype_header("xml"),timeout=settings.REQUEST_TIMEOUT,error_handler=None):
         logger.debug("POST {}".format(url))
         if self.headers:
-            headers = collections.ChainMap(headers,self.headers)
+            if headers:
+                headers = collections.ChainMap(headers,self.headers)
+            else:
+                headers = self.headers
         res = requests.post(url , data=data , headers=headers, auth=(self.username,self.password),timeout=timeout)
         (error_handler or self._handle_response_error)(res)
         return res
@@ -127,7 +133,10 @@ class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMi
     def put(self,url,data,headers=GeoserverUtils.contenttype_header("xml"),timeout=settings.REQUEST_TIMEOUT,error_handler=None):
         logger.debug("PUT {}".format(url))
         if self.headers:
-            headers = collections.ChainMap(headers,self.headers)
+            if headers:
+                headers = collections.ChainMap(headers,self.headers)
+            else:
+                headers = self.headers
         res = requests.put(url , data=data , headers=headers, auth=(self.username,self.password),timeout=timeout)
         (error_handler or self._handle_response_error)(res)
         return res
@@ -135,7 +144,12 @@ class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMi
     def delete(self,url,headers=None,timeout=settings.REQUEST_TIMEOUT,error_handler=None):
         logger.debug("DELETE {}".format(url))
         if self.headers:
-            headers = collections.ChainMap(headers,self.headers)
+            if headers:
+                headers = collections.ChainMap(headers,self.headers)
+            else:
+                headers = self.headers
+
+
         res = requests.delete(url , auth=(self.username,self.password),headers=headers,timeout=timeout)
         (error_handler or self._handle_response_error)(res)
         return res

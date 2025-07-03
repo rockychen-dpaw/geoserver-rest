@@ -128,7 +128,7 @@ class RolesMixin(object):
         res = self.get("{}.json".format(self.user_roles_url(user)),headers=self.accept_header("json"))
         return res.json().get("roles",[])
 
-    def user_has_rule(self,user,role):
+    def user_has_role(self,user,role):
         """
         Return True if user has the role; otherwise return False
         """
@@ -141,7 +141,7 @@ class RolesMixin(object):
         res = self.get(self.usergroup_roles_url(group),headers=self.accept_header("json"))
         return res.json().get("roles",[])
 
-    def usergroup_has_rule(self,usergroup,role):
+    def usergroup_has_role(self,usergroup,role):
         """
         Return True if the usergroup has the role; otherwise return False
         """

@@ -110,13 +110,11 @@ class WMSLayerMixin(object):
     
     def get_wmslayer(self,workspace,layername,storename=None):
         """
-        Return a json object if exists; otherwise return None
+        Return a json object if exists; 
+        Raise ResourceNotFound if not found
         """
-        try:
-            res = self.get(self.wmslayer_url(workspace,layername,storename=storename,format="json"),headers=self.accept_header("json"))
-            return res.json()["wmsLayer"]
-        except ResourceNotFound as ex:
-            return None
+        res = self.get(self.wmslayer_url(workspace,layername,storename=storename,format="json"),headers=self.accept_header("json"))
+        return res.json()["wmsLayer"]
     
     def list_wmslayers(self,workspace,storename):
         """

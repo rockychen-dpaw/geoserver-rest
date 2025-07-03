@@ -125,9 +125,12 @@ class DatastoreMixin(object):
     
         return [str(d["name"]) for d in (res.json().get("dataStores") or {}).get("dataStore") or [] ]
 
-    def upload_dataset(self,workspace,storename,file,filename=None,dataformat=None,update="overwrite"):
+    def upload_dataset(self,workspace,storename,file,filename=None,dataformat=None,update="overwrite",configure="none"):
         """
         Upload the dataset and create the datastore it doesn't exist
+        configure:  
+            none: indicates to configure only the datastore but no layer configuration
+            first: configure both datastore and layer
         """
         if not dataformat:
             if file.rsplit(".",1)[1].lower() in ("gpkg","geopackage"):
@@ -141,9 +144,22 @@ class DatastoreMixin(object):
 
         with open(file,'rb') as f:
             res = self.put(
-                self.upload_dataset_url(workspace,storename,filename,method="file",dataformat=dataformat,update=update),
+                self.upload_dataset_url(workspace,storename,filename,method="file",dataformat=dataformat,update=update,configure=configure),
                 f,
                 headers=self.contenttype_header(dataformat),timeout=600)
+
+        storedata = self.get_datastore(workspace,storename)
+        parameters = {}
+        for item in storedata.get("connectionParameters",{}).get("entry",[]):
+            if not item.get("$"):
+                continue
+            if item["@key"] == "database":
+                #change the database location to relative location
+                pos = item["$"].index("data/{}/{}/".format(workspace,storename))
+                parameters[item["@key"]] = "file:{}".format(item["$"][pos:])
+            else:
+                parameters[item["@key"]] = item["$"]
+        self.update_datastore(workspace,storename,parameters)
 
     def update_datastore(self,workspace,storename,parameters,create=None):
         """

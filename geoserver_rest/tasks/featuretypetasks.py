@@ -217,16 +217,14 @@ class GetFeatures(Task):
                 self.workspace,
                 self.featuretype,
                 count=self.count,
-                srs=self.srs,
-                bbox=self.bbox
+                srs=self.srs
             )
             return geoserver.get_features(
                 self.workspace,
                 self.featuretype,
                 storename=self.datastore,
                 count=self.count,
-                srs=self.srs,
-                bbox=self.bbox
+                srs=self.srs
             )
         else:
             self.url = geoserver.features_url(

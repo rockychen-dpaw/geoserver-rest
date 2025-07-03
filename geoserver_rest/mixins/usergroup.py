@@ -135,7 +135,6 @@ class UsergroupMixin(object):
         Return list of users(username,enabled) in usergroup; if usergroup is None, return the user list in default user group
         """
         res = self.get(self.users_url(usergroup,service=service),headers=self.accept_header("json"))
-        print("***users={}".format(res.json()))
     
         return [(u["userName"],u["enabled"]) for u in (res.json().get("users") or [])]
 
@@ -173,8 +172,6 @@ class UsergroupMixin(object):
 
         user_data = USER_TEMPLATE.format(user,PASSWORD_TEMPLATE.format(password) if password is not None else "" , ENABLED_TEMPLATE.format("true" if enable else "false") if enable is not None else "")
 
-        print("****{} = {}".format(user,user_data))
-
         if create:
             res = self.post(self.users_url(service=service),user_data,headers=collections.ChainMap(self.accept_header("json"),self.contenttype_header("xml")))
             logger.debug("Succeed to add the user({}).".format(user))
@@ -204,14 +201,14 @@ class UsergroupMixin(object):
         if res.status_code == 401:
             #authenticate failed
             return False
-        elif res.status_code < 400 or res.status_code >=500:
+        elif (res.status_code > 300 and res.status_code < 400) or res.status_code >=500:
             #failed to authenticate the user
             res.raise_for_status()
         else:
             #authenticated, but failed to process the request
             return True
 
-    def list_user_groups(self,user,service=None):
+    def get_user_groups(self,user,service=None):
         try:
             res = self.get(self.user_groups_url(user,service=service),headers=self.accept_header("json"))
             return res.json().get("groups") or []
@@ -222,7 +219,7 @@ class UsergroupMixin(object):
         """
         Return True if user is in the group; otherwise return False
         """
-        return any(True for d in self.list_user_groups(user,service=service) if d == group)
+        return any(True for d in self.get_user_groups(user,service=service) if d == group)
 
     def add_user_to_group(self,user,group,service=None):
         """
@@ -246,7 +243,7 @@ class UsergroupMixin(object):
         Update the groups which the user is belonging to
 
         """
-        existing_groups = self.list_user_groups(user,service=service)
+        existing_groups = self.get_user_groups(user,service=service)
         if groups:
             for g in existing_groups:
                 if g in groups:

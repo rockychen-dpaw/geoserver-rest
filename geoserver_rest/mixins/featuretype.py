@@ -135,8 +135,8 @@ class FeaturetypeMixin(object):
             workspace,
             layername,
             "&count={}".format(count) if count is not None and count > 0 else "",
-            "&srsName={}".format(urllib.parse.quote(srs)) if srs and bbox else "",
-            "&bbox={}".format(",".join(str(bbox[i]) for i in (1,0,3,2)) if isinstance(bbox,(list,tuple)) else ",".join(str(bbox[k]) for k in ("miny","minx","maxy","maxx"))) if srs and bbox else "",
+            "&srsName={}".format(urllib.parse.quote(srs)) if srs else "",
+            "&bbox={}".format(",".join(str(d) for d in bbox) if isinstance(bbox,(list,tuple)) else ",".join(str(bbox[k]) for k in ("minx","miny","maxx","maxy"))) if bbox else "",
         )
 
     def wfscapabilities_url(self,version="2.0.0"):
@@ -173,13 +173,11 @@ class FeaturetypeMixin(object):
     
     def get_featuretype(self,workspace,layername,storename=None):
         """
-        Return a json object if feature type exists; otherwise return None
+        Return a json object 
+        raise ReourceNotFound excepion if not found
         """
-        try:
-            res = self.get(self.featuretype_url(workspace,layername,storename=storename),headers=self.accept_header("json"))
-            return res.json()["featureType"]
-        except ResourceNotFound as ex:
-            return None
+        res = self.get(self.featuretype_url(workspace,layername,storename=storename),headers=self.accept_header("json"))
+        return res.json()["featureType"]
     
     def get_featurecount(self,workspace,layername,storename=None):
         """

@@ -106,15 +106,46 @@ class GridsetUtil(object):
 
     def tiles(self,bbox, zoom):
         """
-        Return a iterate to go through all the tiles included in the bbox
+        bbox: left bottom, right top
         """
-        raise Exception("Not Implemented")
+        left_bottom_tile = self.get_tile(bbox[0],bbox[1], zoom)
+        right_top_tile = self.get_tile(bbox[2],bbox[3], zoom)
+
+        for x in range(left_bottom_tile[0],right_top_tile[0] + 1):
+            for y in range(right_top_tile[1],left_bottom_tile[1] + 1):
+                yield (x,y)
 
     def get_tile_count(self,bbox, zoom):
+        totalTileCount = 0
+        left_bottom_tile = self.get_tile(bbox[0],bbox[1], zoom)
+        right_top_tile = self.get_tile(bbox[2],bbox[3], zoom)
+
+        return (right_top_tile[0] - left_bottom_tile[0] + 1) * (left_bottom_tile[1] - right_top_tile[1] + 1)
+
+    def get_bbox_tile(self,bbox):
         """
-        Return the total number of tiles in the bbox
+        bbox : [minx,miny,maxx,maxy]
+        Return (zoom,x,y)
         """
-        raise Exception("Not Implemented")
+        zoom = 5
+        isbiggerbefore = None
+        while(True):
+            x,y= self.get_title(bbox[0],bbox[1],zoom)
+            tilebbox = self.tile_bbox(zoom,x,y)
+            if tilebbox[0] <= bbox[0] and tilebbox[1] <= bbox[1] and tilebbox[2] >= bbox[2] and tilebbox[3] >= bbox[3]:
+                #tilebbox bigger than the bbox.zoom in
+                if isbiggerbefore == False:
+                    return (zoom,x,y)
+                else:
+                    isbiggerbefore = True
+                    zoom += 1
+            else:
+                #tilebbox smaller than the bbox.zoom out
+                if isbiggerbefore == True:
+                    return (zoom - 1,*self.get_title(bbox[0],bbox[1],zoom - 1))
+                else:
+                    isbiggerbefore = False
+                    zoom -= 1
 
 
 class EPSG4326Util(GridsetUtil):
@@ -148,23 +179,6 @@ class EPSG4326Util(GridsetUtil):
         ytile = int((lat_deg - 90.0) / -180.0 * math.pow(2.0,zoom))
         return (xtile, ytile)
 
-    def tiles(self,bbox, zoom):
-        """
-        bbox: left bottom, right top
-        """
-        left_bottom_tile = self.get_tile(bbox[0],bbox[1], zoom)
-        right_top_tile = self.get_tile(bbox[2],bbox[3], zoom)
-
-        for x in range(left_bottom_tile[0],right_top_tile[0] + 1):
-            for y in range(right_top_tile[1],left_bottom_tile[1] + 1):
-                yield (x,y)
-
-    def get_tile_count(self,bbox, zoom):
-        totalTileCount = 0
-        left_bottom_tile = self.get_tile(bbox[0],bbox[1], zoom)
-        right_top_tile = self.get_tile(bbox[2],bbox[3], zoom)
-
-        return (right_top_tile[0] - left_bottom_tile[0] + 1) * (left_bottom_tile[1] - right_top_tile[1] + 1)
 
     def _decimal2minutes(decimal_degrees, is_latitude) :
         absdegrees = Math.abs(decimal_degrees);
@@ -356,11 +370,29 @@ class GWCMixin(object):
     def get_tile_count(self,gridset,bbox,zoom):
         return GridsetUtil.get_instance(self.get_gridset(gridset)["srs"]).get_tile_count(bbox,zoom)
 
-    def get_tile(self,workspace,layername,zoom,row,column,gridset=settings.GWC_GRIDSET,format="image/jpeg",style=None,version=settings.WMTS_VERSION,outputfile=None):
+    def get_tile(self,workspace,layername,zoom=None,row=None,column=None,gridset=settings.GWC_GRIDSET,format="image/jpeg",style=None,version=settings.WMTS_VERSION,outputfile=None):
         """
+        if zoom,row or column is None, will return a tile conver the whole layer
         outputfile: a temporary file will be created if outputfile is None, the client has the responsibility to delete the outputfile
         If succeed, save the image to outputfile
         """
+        if zoom is None or row is None or column is None:
+            try:
+                layerdata = self.geoserver.get_featuretype(workspace,layername)
+                bbox = self.geoserver.get_featuretype_field("latLonBounding")
+                bbox = (bbox["minx"],bbox["miny"],bbox["maxx"],bbox["maxy"])
+            except ResourceNotFound as ex:
+                try:
+                    layerdata = self.geoserver.get_wmslayer(workspace,layername)
+                    bbox = self.geoserver.get_wmslayer_field("latLonBounding")
+                    bbox = (bbox["minx"],bbox["miny"],bbox["maxx"],bbox["maxy"])
+                except ResourceNotFound as ex:
+                    layerdata = self.geoserver.get_layergroup(workspace,layername)
+                    bbox = self.geoserver.get_layergroup_field("bounds")
+                    bbox = (bbox["minx"],bbox["miny"],bbox["maxx"],bbox["maxy"])
+
+            zoom,row,column = GridsetUtil.get_instance(self.get_gridset(gridset)["srs"]).get_bbox_tile(bbox)
+
         url = self.tile_url(workspace,layername,zoom,row,column,gridset=gridset,format=format,style=style,version=version)
         logger.debug("Tile url={}".format(url))
         res = self.get(url,headers=self.accept_header("jpeg"),error_handler=self._handle_gwcresponse_error,timeout=settings.WMTS_TIMEOUT)
