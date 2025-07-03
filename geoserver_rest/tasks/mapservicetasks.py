@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from pyproj import Transformer
 
 from .base import Task
 from .. import settings
@@ -39,7 +40,7 @@ class TestWMTSService(Task):
     format = settings.TEST_FORMAT
     url = None
 
-    def __init__(self,workspace,store,layername,layer_bbox,style,post_actions_factory = None,zoom=-1,gridset=settings.GWC_GRIDSET):
+    def __init__(self,workspace,store,layername,srs,layer_bbox,style,post_actions_factory = None,zoom=-1,gridset=settings.GWC_GRIDSET):
         """
         if zoom is -1. zoom will be set to the level which one tile contains the whole layerbox if zoom is -1, and then find the row and column
         otherwise, find the center point of layer box , and then find the row and column based on the zoom level
@@ -49,32 +50,57 @@ class TestWMTSService(Task):
         self.workspace = workspace
         self._store = store
         self._layername = layername
+        self.srs = srs
         self.style = style
         self.zoom = zoom
         self.gridset = gridset
         self.gridsetdata = None
         self.layer_bbox = layer_bbox
+        self.layer_bbox_gridset = None
 
-        for i in range(len(self.layer_bbox)):
-            self.layer_bbox[i] = float(self.layer_bbox[i])
-
-        if self.layer_bbox[0] < settings.MAX_BBOX[0]:
-            self.layer_bbox[0] = settings.MAX_BBOX[0]
-        if self.layer_bbox[1] < settings.MAX_BBOX[1]:
-            self.layer_bbox[1] = settings.MAX_BBOX[1]
-    
-        if self.layer_bbox[2] > settings.MAX_BBOX[2]:
-            self.layer_bbox[2] = settings.MAX_BBOX[2]
-    
-        if self.layer_bbox[3] > settings.MAX_BBOX[3]:
-            self.layer_bbox[3] = settings.MAX_BBOX[3]
-        
 
     def _format_result(self):
-        return "URL : {}\r\nimage size = {}".format(self.url or "",self.result)
+        if self.layer_bbox_gridset is None or self.layer_bbox == self.layer_bbox_gridset:
+            return """URL : {}
+srs : {}
+layer bbox : {}
+image size : {}
+""".format(self.url or "",self.srs,self.layer_bbox,self.result)
+        else:
+            return """URL : {}
+srs : {}
+layer bbox : {}
+gridset srs : {}
+layer bbox for gridset : {}
+image size : {}
+""".format(self.url or "",self.srs,self.layer_bbox,self.gridsetdata["srs"],self.layer_bbox_gridset,self.result)
 
     def set_with_gridset(self,geoserver):
         self.gridsetdata = geoserver.get_gridset(self.gridset)
+        if self.srs.upper() != self.gridsetdata["srs"]:
+            layer_bbox = list(self.layer_bbox)
+            transformer = Transformer.from_crs(self.srs, self.gridsetdata["srs"])
+            layer_bbox[1], layer_bbox[0] = transformer.transform(layer_bbox[0],layer_bbox[1])
+            layer_bbox[3], layer_bbox[2] = transformer.transform(layer_bbox[2],layer_bbox[3])
+        else:
+            layer_bbox = self.layer_bbox
+
+        for i in range(len(layer_bbox)):
+            layer_bbox[i] = float(layer_bbox[i])
+
+        if self.gridsetdata["srs"].upper() in ("EPSG:4326","EPSG:4283"): 
+            if layer_bbox[0] < settings.MAX_BBOX[0]:
+                layer_bbox[0] = settings.MAX_BBOX[0]
+            if layer_bbox[1] < settings.MAX_BBOX[1]:
+                layer_bbox[1] = settings.MAX_BBOX[1]
+    
+            if layer_bbox[2] > settings.MAX_BBOX[2]:
+                layer_bbox[2] = settings.MAX_BBOX[2]
+    
+            if layer_bbox[3] > settings.MAX_BBOX[3]:
+                layer_bbox[3] = settings.MAX_BBOX[3]
+
+        #get the gwc details
         maxZoom = len(self.gridsetdata["resolutions"]) - 1
         if self.zoom >= 0:
             if self.zoom > maxZoom:
@@ -91,11 +117,13 @@ class TestWMTSService(Task):
             if self.zoom < 0:
                 self.zoom = 0
 
+        self.layer_bbox_gridset = layer_bbox
+
     def get_tileposition(self,geoserver):
         #get the intersection between layer_box and settings.MAX_BBOX
         self.set_with_gridset(geoserver)
         
-        center_point = [(self.layer_bbox[0] + self.layer_bbox[2])/2,(self.layer_bbox[1] + self.layer_bbox[3])/2]
+        center_point = [(self.layer_bbox_gridset[0] + self.layer_bbox_gridset[2])/2,(self.layer_bbox_gridset[1] + self.layer_bbox_gridset[3])/2]
         xtile,ytile = geoserver.get_tileposition(center_point[0],center_point[1],self.zoom,gridset = self.gridset)
         return (xtile,ytile)
 
@@ -239,21 +267,26 @@ def createtasks_TestWMSService4FeatureType(getFeatureTypeDetailTask,limit = 0):
     """
     a generator to return TestWMSService4FeatureType tasks
     """
-    if not getFeatureTypeDetailTask.featuredetail["geometry"]:
-        return
     if not getFeatureTypeDetailTask.result:
         return
+    if not getFeatureTypeDetailTask.enabled:
+        return 
+    if not getFeatureTypeDetailTask.result["geometry"]:
+        return
+
     #get the intersection between layer_box and settings.MAX_BBOX
     layer_bbox = getFeatureTypeDetailTask.result.get("latLonBoundingBox")
     if not layer_bbox or any(layer_bbox.get(k) is None for k in ("minx","miny","maxx","maxy")):
         return
 
     layer_bbox = [layer_bbox[k] for k in ("minx","miny","maxx","maxy")]
+    srs = getFeatureTypeDetailTask.result["latLonBoundingBox"]["crs"].upper()
 
     yield TestWMSService4FeatureType(
         getFeatureTypeDetailTask.workspace,
         getFeatureTypeDetailTask.datastore,
         getFeatureTypeDetailTask.featuretype,
+        srs,
         layer_bbox,
         None,
         zoom = settings.TEST_ZOOM,
@@ -276,9 +309,11 @@ def createtasks_TestWMTSService4FeatureType(getFeatureTypeDetailTask,limit = 0):
     """
     a generator to return TestWMSService4FeatureType tasks
     """
-    if not getFeatureTypeDetailTask.featuredetail["geometry"]:
-        return
     if not getFeatureTypeDetailTask.result:
+        return
+    if not getFeatureTypeDetailTask.enabled:
+        return 
+    if not getFeatureTypeDetailTask.result["geometry"]:
         return
     if not getFeatureTypeDetailTask.result.get("gwc") or not getFeatureTypeDetailTask.result["gwc"].get("enabled",False):
         return
@@ -288,6 +323,7 @@ def createtasks_TestWMTSService4FeatureType(getFeatureTypeDetailTask,limit = 0):
         return
     
     layer_bbox = [layer_bbox[k] for k in ("minx","miny","maxx","maxy")]
+    srs = getFeatureTypeDetailTask.result["latLonBoundingBox"]["crs"].upper()
 
     for gridset in settings.GWC_GRIDSETS:
         gridsetdata = next((gridsetdata  for gridsetdata in getFeatureTypeDetailTask.result["gwc"]["gridSubsets"] if gridsetdata["gridSetName"] == gridset),None)
@@ -305,6 +341,7 @@ def createtasks_TestWMTSService4FeatureType(getFeatureTypeDetailTask,limit = 0):
             getFeatureTypeDetailTask.workspace,
             getFeatureTypeDetailTask.datastore,
             getFeatureTypeDetailTask.featuretype,
+            srs,
             layer_bbox,
             None,
             post_actions_factory=getFeatureTypeDetailTask.post_actions_factory,
@@ -325,11 +362,13 @@ def createtasks_TestWMSService4Feature(getFeaturesTask,limit = 0):
 
     if not layer_bbox or any(d is None for d in layer_bbox ):
         return
+    srs = getFeaturesTask.featuredetails["latLonBoundingBox"]["crs"].upper()
 
     yield TestWMSService4FeatureType(
         getFeaturesTask.workspace,
         getFeaturesTask.datastore,
         getFeaturesTask.featuretype,
+        srs,
         layer_bbox,
         None,
         zoom = -1,
@@ -354,17 +393,18 @@ def createtasks_TestWMTSService4Feature(getFeaturesTask,limit = 0):
     """
     if not getFeaturesTask.result or not getFeaturesTask.result.get("features"):
         return
-    if not getFeaturesTask.featuredetail.get("gwc") or not getFeaturesTask.featuredetail["gwc"].get("enabled",False):
-        return
+
     #get the intersection between layer_box and settings.MAX_BBOX
     layer_bbox = getFeaturesTask.result["features"][0].get("bbox")
     if not layer_bbox:
         layer_bbox = utils.get_bbox((getFeaturesTask.result["features"][0].get("geometry") or {}).get("coordinates"))
     if not layer_bbox or any(d is None for d in layer_bbox ):
         return
+
+    srs = getFeaturesTask.featuredetails["latLonBoundingBox"]["crs"].upper()
     
     for gridset in settings.GWC_GRIDSETS:
-        gridsetdata = next((gridsetdata  for gridsetdata in getFeaturesTask.featuredetail["gwc"]["gridSubsets"] if gridsetdata["gridSetName"] == gridset),None)
+        gridsetdata = next((gridsetdata  for gridsetdata in getFeaturesTask.featuredetails["gwc"]["gridSubsets"] if gridsetdata["gridSetName"] == gridset),None)
         if not gridsetdata:
             continue
 
@@ -372,6 +412,7 @@ def createtasks_TestWMTSService4Feature(getFeaturesTask,limit = 0):
             getFeaturesTask.workspace,
             getFeaturesTask.datastore,
             getFeaturesTask.featuretype,
+            srs,
             layer_bbox,
             None,
             post_actions_factory=getFeaturesTask.post_actions_factory,
@@ -385,17 +426,22 @@ def createtasks_TestWMSService4WMSLayer(getWMSLayerDetailTask,limit = 0):
     """
     if not getWMSLayerDetailTask.result:
         return
+    if not getWMSLayerDetailTask.enabled:
+        return
+
     #get the intersection between layer_box and settings.MAX_BBOX
     layer_bbox = getWMSLayerDetailTask.result.get("latLonBoundingBox")
     if not layer_bbox or any(layer_bbox.get(k) is None for k in ("minx","miny","maxx","maxy")):
-        layer_bbox = settings.MAX_BBOX
-    else:
-        layer_bbox = [layer_bbox[k] for k in ("minx","miny","maxx","maxy")]
+        return
+
+    layer_bbox = [layer_bbox[k] for k in ("minx","miny","maxx","maxy")]
+    srs = getWMSLayerDetailTask.result["latLonBoundingBox"]["crs"].upper()
 
     yield TestWMSService4WMSLayer(
         getWMSLayerDetailTask.workspace,
         getWMSLayerDetailTask.wmsstore,
         getWMSLayerDetailTask.layername,
+        srs,
         layer_bbox,
         None,
         zoom = settings.TEST_ZOOM,
@@ -407,6 +453,9 @@ def createtasks_TestWMTSService4WMSLayer(getWMSLayerDetailTask,limit = 0):
     """
     if not getWMSLayerDetailTask.result:
         return
+    if not getWMSLayerDetailTask.enabled:
+        return
+
     if not getWMSLayerDetailTask.result.get("gwc") or not getWMSLayerDetailTask.result["gwc"].get("enabled",False):
         return
     #get the intersection between layer_box and settings.MAX_BBOX
@@ -415,6 +464,7 @@ def createtasks_TestWMTSService4WMSLayer(getWMSLayerDetailTask,limit = 0):
         return
     
     layer_bbox = [layer_bbox[k] for k in ("minx","miny","maxx","maxy")]
+    srs = getWMSLayerDetailTask.result["latLonBoundingBox"]["crs"].upper()
 
     for gridset in settings.GWC_GRIDSETS:
         gridsetdata = next((gridsetdata  for gridsetdata in getWMSLayerDetailTask.result["gwc"]["gridSubsets"] if gridsetdata["gridSetName"] == gridset),None)
@@ -432,6 +482,7 @@ def createtasks_TestWMTSService4WMSLayer(getWMSLayerDetailTask,limit = 0):
             getWMSLayerDetailTask.workspace,
             getWMSLayerDetailTask.wmsstore,
             getWMSLayerDetailTask.layername,
+            srs,
             layer_bbox,
             None,
             post_actions_factory=getWMSLayerDetailTask.post_actions_factory,
@@ -445,16 +496,21 @@ def createtasks_TestWMSService4Layergroup(getLayergroupDetailTask,limit = 0):
     """
     if not getLayergroupDetailTask.result:
         return
+    if not getLayergroupDetailTask.enabled:
+        return
+
     #get the intersection between layer_box and settings.MAX_BBOX
     layer_bbox = getLayergroupDetailTask.result.get("bounds")
     if not layer_bbox or any(layer_bbox.get(k) is None for k in ("minx","miny","maxx","maxy")):
         return
 
     layer_bbox = [layer_bbox[k] for k in ("minx","miny","maxx","maxy")]
+    srs = getLayergroupDetailTask.result.get("bounds")["crs"]
 
     yield TestWMSService4Layergroup(
         getLayergroupDetailTask.workspace,
         getLayergroupDetailTask.layergroup,
+        srs,
         layer_bbox,
         None,
         zoom = settings.TEST_ZOOM,
@@ -466,6 +522,9 @@ def createtasks_TestWMTSService4Layergroup(getLayergroupDetailTask,limit = 0):
     """
     if not getLayergroupDetailTask.result:
         return
+    if not getLayergroupDetailTask.enabled:
+        return
+
     if not getLayergroupDetailTask.result.get("gwc") or not getLayergroupDetailTask.result["gwc"].get("enabled",False):
         return
     #get the intersection between layer_box and settings.MAX_BBOX
@@ -474,6 +533,7 @@ def createtasks_TestWMTSService4Layergroup(getLayergroupDetailTask,limit = 0):
         return
     
     layer_bbox = [layer_bbox[k] for k in ("minx","miny","maxx","maxy")]
+    srs = getLayergroupDetailTask.result.get("bounds")["crs"]
 
     for gridset in settings.GWC_GRIDSETS:
         gridsetdata = next((gridsetdata  for gridsetdata in getLayergroupDetailTask.result["gwc"]["gridSubsets"] if gridsetdata["gridSetName"] == gridset),None)
@@ -490,6 +550,7 @@ def createtasks_TestWMTSService4Layergroup(getLayergroupDetailTask,limit = 0):
         yield TestWMTSService4Layergroup(
             getLayergroupDetailTask.workspace,
             getLayergroupDetailTask.layergroup,
+            srs,
             layer_bbox,
             None,
             post_actions_factory=getLayergroupDetailTask.post_actions_factory,

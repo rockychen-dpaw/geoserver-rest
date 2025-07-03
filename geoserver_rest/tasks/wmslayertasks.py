@@ -1,13 +1,13 @@
 import json
 import logging
 import os
-from pyproj import Transformer
 
 from .base import Task
 from .. import timezone
 from .. import settings
-from .wmsstoretasks import ListWMSStores
+from .wmsstoretasks import ListWMSstores
 from .workspacetasks import ListResourcesInWorkspace
+from ..exceptions import *
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +40,11 @@ class ListWMSLayers(Task):
     arguments = ("workspace","wmsstore")
     keyarguments = ("workspace","wmsstore")
     category = "List WMSLayers"
-    def __init__(self,workspace,wmsstore,post_actions_factory = None):
+    def __init__(self,workspace,wmsstore,storedetails,post_actions_factory = None):
         super().__init__(post_actions_factory = post_actions_factory) 
         self.workspace = workspace
         self.wmsstore = wmsstore
+        self.storedetails = storedetails
 
     def _format_result(self):
         return "WMSLayers : {}".format(len(self.result) if self.result else 0) 
@@ -70,23 +71,42 @@ class GetWMSLayerDetail(Task):
     keyarguments = ("workspace","wmsstore","layername")
     category = "Get WMSLayer Detail "
 
-    def __init__(self,workspace,wmsstore,layername,post_actions_factory = None):
+    def __init__(self,workspace,wmsstore,layername,storedetails,post_actions_factory = None):
         super().__init__(post_actions_factory = post_actions_factory) 
         self.workspace = workspace
         self.wmsstore = wmsstore
         self.layername = layername
+        self.storedetails = storedetails
 
     def _format_result(self):
         return json.dumps(self.result,indent=4) if self.result else "{}"
 
+    @property
+    def enabled(self):
+        return self.result and self.result.get("enabled") and self.storedetails.get("enabled")
+
     def _warnings(self):
-        msg = None
+        msg = []
         level = self.WARNING
-        if self.result.get("originalLatLonBoundingBox"):
-            msg = "The CRS of latLonBoundingBox is not EPSG:4326 or EPSG:4283\r\n{}".format(self.result.get("originalLatLonBoundingBox"))
+        if not self.result:
+            msg.append("Detail is missing")
+            level = self.ERROR
+
+        if not self.result.get("enabled") or not self.storedetails.get("enabled"):
+            msg.append("The layer is disabled.")
+
+        if not self.result["gwc"]["enabled"]:
+            msg.append("The GWC is disabled.")
+
+        if self.result["gwc"].get("expireCache",0) < 0:
+            msg.append("The GWC server cache is disabled.")
+            level = self.ERROR
+
+        if self.result.get("latLonBoundingBox") and self.result["latLonBoundingBox"]["crs"].upper() not in ("EPSG:4326","EPSG:4283"):
+            msg.append("The CRS({}) of latLonBoundingBox is not EPSG:4326 or EPSG:4283\r\n{}".format(self.result["latLonBoundingBox"]["crs"],self.result.get("originalLatLonBoundingBox")))
         
         if msg:
-            yield (level,msg)
+            yield (level,"\r\n".join(msg))
 
     def _exec(self,geoserver):
         result = {}
@@ -102,17 +122,14 @@ class GetWMSLayerDetail(Task):
                 result["latLonBoundingBox"]["crs"] = "EPSG:4326"
             elif isinstance(result["latLonBoundingBox"]["crs"],dict):
                 result["latLonBoundingBox"]["crs"] = result["latLonBoundingBox"]["crs"]["$"]
-                
-            if result["latLonBoundingBox"]["crs"].upper() not in ("EPSG:4326","EPSG:4283"):
-                #tranform the bbox to epsg:4326
-                result["originalLatLonBoundingBox"] = dict(result["latLonBoundingBox"])
-                transformer = Transformer.from_crs(result["latLonBoundingBox"]["crs"], "EPSG:4326")
-                result["latLonBoundingBox"]["miny"], result["latLonBoundingBox"]["minx"] = transformer.transform(result["latLonBoundingBox"]["miny"], result["latLonBoundingBox"]["minx"])
-                result["latLonBoundingBox"]["maxy"], result["latLonBoundingBox"]["maxx"] = transformer.transform(result["latLonBoundingBox"]["maxy"], result["latLonBoundingBox"]["maxx"])
-
-
+ 
         #get the gwc details
-        detail = geoserver.get_gwclayer(self.workspace,self.layername)
+        detail = None
+        try:
+            detail = geoserver.get_gwclayer(self.workspace,self.layername)
+        except ResourceNotFound as ex:
+            pass
+
         if detail:
             result["gwc"] = {}
             for k in ["expireClients","expireCache","gridSubsets","enabled"]:
@@ -120,24 +137,13 @@ class GetWMSLayerDetail(Task):
         
         return result
 
-def createtasks_ListWMSLayers(task,limit = 0):
+def createtasks_ListWMSLayers(getWMSStoreTask,limit = 0):
     """
     a generator to return layernames tasks
     """
-    if isinstance(task,ListWMSStores):
-        result = task.result
-    elif isinstance(task,ListResourcesInWorkspace):
-        result = (task.result[1] or []) if task.result else []
-    else:
+    if not getWMSStoreTask.result:
         return
-    if not result:
-        return
-    row = 0
-    for store in result:
-        row += 1
-        if limit > 0 and row > limit:
-            break
-        yield ListWMSLayers(task.workspace,store,post_actions_factory=task.post_actions_factory)
+    yield ListWMSLayers(getWMSStoreTask.workspace,getWMSStoreTask.wmsstore,getWMSStoreTask.result,post_actions_factory=getWMSStoreTask.post_actions_factory)
 
 
 def createtasks_GetWMSLayerDetail(listWMSLayersTask,limit = 0):
@@ -151,7 +157,13 @@ def createtasks_GetWMSLayerDetail(listWMSLayersTask,limit = 0):
         row += 1
         if limit > 0 and row > limit:
             break
-        yield GetWMSLayerDetail(listWMSLayersTask.workspace,listWMSLayersTask.wmsstore,layername,post_actions_factory=listWMSLayersTask.post_actions_factory)
+        yield GetWMSLayerDetail(
+            listWMSLayersTask.workspace,
+            listWMSLayersTask.wmsstore,
+            layername,
+            listWMSLayersTask.storedetails,
+            post_actions_factory=listWMSLayersTask.post_actions_factory
+        )
 
 def createtasks_WMSGetCapabilities(task,limit = 0):
     """

@@ -133,19 +133,19 @@ class GeoserverHealthCheck(object):
             ]
         elif taskcls == ListWorkspaces:
             return [
-                self.create_tasks_from_previoustask_factory(createtasks_ListResourcesInWorkspace,0),
-                self._reportwriteaction,
-                self._warningwriteaction
-            ]
-        elif taskcls == ListResourcesInWorkspace:
-            return [
-                self.create_tasks_from_previoustask_factory(createtasks_ListFeatureTypes),
-                self.create_tasks_from_previoustask_factory(createtasks_ListWMSLayers),
-                self.create_tasks_from_previoustask_factory(createtasks_GetLayergroupDetail),
+                self.create_tasks_from_previoustask_factory(createtasks_ListDatastores,0),
+                self.create_tasks_from_previoustask_factory(createtasks_ListWMSstores,0),
+                self.create_tasks_from_previoustask_factory(createtasks_ListLayergroups,0),
                 self._reportwriteaction,
                 self._warningwriteaction
             ]
         elif taskcls == ListDatastores:
+            return [
+                self.create_tasks_from_previoustask_factory(createtasks_GetDatastore),
+                self._reportwriteaction,
+                self._warningwriteaction
+            ]
+        elif taskcls == GetDatastore:
             return [
                 self.create_tasks_from_previoustask_factory(createtasks_ListFeatureTypes),
                 self._reportwriteaction,
@@ -153,12 +153,17 @@ class GeoserverHealthCheck(object):
             ]
         elif taskcls == ListFeatureTypes:
             return [
-                #self.create_tasks_from_previoustask_factory(createtasks_GetFeatureCount),
                 self.create_tasks_from_previoustask_factory(createtasks_GetFeatureTypeDetail),
                 self._reportwriteaction,
                 self._warningwriteaction
             ]
-        elif taskcls == ListWMSStores:
+        elif taskcls == ListWMSstores:
+            return [
+                self.create_tasks_from_previoustask_factory(createtasks_GetWMSstore),
+                self._reportwriteaction,
+                self._warningwriteaction,
+            ]
+        elif taskcls == GetWMSstore:
             return [
                 self.create_tasks_from_previoustask_factory(createtasks_ListWMSLayers),
                 self._reportwriteaction,
@@ -179,6 +184,7 @@ class GeoserverHealthCheck(object):
         elif taskcls == GetFeatureTypeDetail:
             return [
                 self.create_tasks_from_previoustask_factory(createtasks_GetFeatures),
+                #self.create_tasks_from_previoustask_factory(createtasks_GetFeatureCount),
                 #self.create_tasks_from_previoustask_factory(createtasks_TestWMSService4FeatureType),
                 #self.create_tasks_from_previoustask_factory(createtasks_TestWMTSService4FeatureType),
                 self._reportwriteaction,
@@ -263,11 +269,13 @@ class GeoserverHealthCheck(object):
     def start(self):
         self.taskrunner.start()
         self.starttime = timezone.localtime()
-        basetask = CheckGeoserverAlive()
+        #basetask = CheckGeoserverAlive()
+        basetask = GetWMSLayerDetail("kaartdijin-boodja-private","WA_firescan","linescanner_SWIR_3-6_2",self.geoserver.get_wmsstore("kaartdijin-boodja-private","WA_firescan"))
         self._reportwriteaction = self.write_report_action_factory(basetask)
         self._warningwriteaction = self.write_warning_action_factory(basetask)
 
-        task = CheckGeoserverAlive(post_actions_factory = self.post_actions_factory)
+        #task = CheckGeoserverAlive(post_actions_factory = self.post_actions_factory)
+        task = GetFeatureTypeDetail("kaartdijin-boodja-private","CPT_DFES_BUSHFIRE_PRONE_AREAS","CPT_DFES_BUSHFIRE_PRONE_AREAS",self.geoserver.get_datastore("kaartdijin-boodja-private","CPT_DFES_BUSHFIRE_PRONE_AREAS"),post_actions_factory = self.post_actions_factory)
         self.taskrunner.add_task(task)
 
 

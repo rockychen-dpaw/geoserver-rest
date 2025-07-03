@@ -3,8 +3,9 @@ import json
 from .base import Task
 from .. import timezone
 from .. import settings
-from .wmsstoretasks import ListWMSStores
+from .wmsstoretasks import ListWMSstores
 from .workspacetasks import ListResourcesInWorkspace
+from ..exceptions import *
 
 class ListLayergroups(Task):
     """
@@ -43,31 +44,40 @@ class GetLayergroupDetail(Task):
         self.workspace = workspace
         self.layergroup = layergroup
 
+    @property
+    def enabled(self):
+        return self.result and self.result.get("enabled")
+
     def _format_result(self):
         return json.dumps(self.result,indent=4) if self.result else "{}"
 
     def _warnings(self):
-        if not self.result:
-            yield (self.ERROR,"Detail is missing")
-        msg = None
+        msg = []
         level = self.WARNING
+        if not self.result:
+            msg.append("Detail is missing")
+            level = self.ERROR
+
+        if not self.result.get("enabled"):
+            msg.append("The layergroup is disabled.")
+
         if self.result.get("originalBonds"):
-            msg = "The CRS of latLonBoundingBox is not EPSG:4326 or EPSG:4283\r\n{}".format(self.result.get("originalBonds"))
+            msg.append("The CRS of latLonBoundingBox is not EPSG:4326 or EPSG:4283\r\n{}".format(self.result.get("originalBonds")))
 
         if self.result.get("gwc"):
             for gridset in settings.GWC_GRIDSETS:
                 if not any(gridsetdata["gridSetName"] == gridset  for gridsetdata in self.result["gwc"]["gridSubsets"]):
-                    msg = "{}{}{}".format(msg or "", "\r\n" if msg else "","The gridset({}) was not configured".format(gridset))
+                    msg.append("The gridset({}) was not configured".format(gridset))
             if not self.result["gwc"]["enabled"]:
-                msg = "{}{}{}".format(msg or "", "\r\n" if msg else "","The GWC was disabled.")
+                msg.append("The GWC is disabled.")
             if self.result["gwc"].get("expireCache",0) < 0:
-                msg = "{}{}{}".format(msg or "", "\r\n" if msg else "","The GWC server cache was disabled.")
+                msg.append("The GWC server cache is disabled.")
                 level = self.ERROR
             if self.result["gwc"].get("expireClients",0) > settings.MAX_EXPIRE_CLIENTS:
-                msg = "{}{}{}".format(msg or "", "\r\n" if msg else "","The GWC client cache is greater than {} seconds".format(settings.MAX_EXPIRE_CLIENTS_STR))
+                msg.append("The GWC client cache is greater than {} seconds".format(settings.MAX_EXPIRE_CLIENTS_STR))
 
         if msg:
-            yield (level,msg)
+            yield (level,"\r\n".join(msg))
 
     def _exec(self,geoserver):
         result = {}
@@ -84,14 +94,12 @@ class GetLayergroupDetail(Task):
             elif isinstance(result["bonds"]["crs"],dict):
                 result["bonds"]["crs"] = result["bonds"]["crs"]["$"]
                 
-            if result["bonds"]["crs"].upper() not in ("EPSG:4326","EPSG:4283"):
-                #tranform the bbox to epsg:4326
-                result["originalBonds"] = dict(result["bonds"])
-                transformer = Transformer.from_crs(result["bonds"]["crs"], "EPSG:4326")
-                result["bonds"]["miny"], result["bonds"]["minx"] = transformer.transform(result["bonds"]["miny"], result["bonds"]["minx"])
-                result["bonds"]["maxy"], result["bonds"]["maxx"] = transformer.transform(result["bonds"]["maxy"], result["bonds"]["maxx"])
+        detail = None
+        try:
+            detail = geoserver.get_gwclayer(self.workspace,self.layergroup)
+        except ResourceNotFound as ex:
+            pass
 
-        detail = geoserver.get_gwclayer(self.workspace,self.layergroup)
         if detail:
             result["gwc"] = {}
             for k in ["expireClients","expireCache","gridSubsets","enabled"]:

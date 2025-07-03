@@ -1,12 +1,12 @@
 import json
 import os
 import logging
-from pyproj import Transformer
 
 from .base import Task
 from .. import settings
 from .datastoretasks import ListDatastores
 from .workspacetasks import ListResourcesInWorkspace
+from ..exceptions import *
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +39,11 @@ class ListFeatureTypes(Task):
     arguments = ("workspace","datastore")
     keyarguments = ("workspace","datastore")
     category = "List Features"
-    def __init__(self,workspace,datastore,post_actions_factory = None):
+    def __init__(self,workspace,datastore,storedetails,post_actions_factory = None):
         super().__init__(post_actions_factory = post_actions_factory) 
         self.workspace = workspace
         self.datastore = datastore
+        self.storedetails = storedetails
 
     def _format_result(self):
         return "FeatureTypes = {}".format(len(self.result) if self.result else 0) 
@@ -69,38 +70,45 @@ class GetFeatureTypeDetail(Task):
     keyarguments = ("workspace","datastore","featuretype")
     category = "Get Featuretype Detail "
 
-    def __init__(self,workspace,datastore,featuretype,post_actions_factory = None):
+    def __init__(self,workspace,datastore,featuretype,storedetails,post_actions_factory = None):
         super().__init__(post_actions_factory = post_actions_factory) 
         self.workspace = workspace
         self.datastore = datastore
         self.featuretype = featuretype
+        self.storedetails = storedetails
+
+    @property
+    def enabled(self):
+        return self.result and self.result.get("enabled") and self.storedetails.get("enabled")
 
     def _warnings(self):
-        if not self.result:
-            yield (self.ERROR,"Detail is missing")
-        msg = None
+        msg = []
         level = self.WARNING
 
-        if self.result.get("originalLatLonBoundingBox"):
-            msg = "{}{}{}\r\n{}".format(msg or "", "\r\n" if msg else "","The CRS of latLonBoundingBox is not EPSG:4326 or EPSG:4283",self.result.get("originalLatLonBoundingBox"))
-        
-        if msg:
-            yield (level,msg)
+        if not self.result:
+            msg.append("Detail is missing")
+            level = self.ERROR
 
+        if not self.result.get("enabled") or not self.storedetails.get("enabled"):
+            msg.append("The featuretype is disabled.")
+
+        if self.result.get("originalLatLonBoundingBox"):
+            msg.append("{}\r\n{}".format("The CRS of latLonBoundingBox is not EPSG:4326 or EPSG:4283",self.result.get("originalLatLonBoundingBox")))
+        
         if self.result.get("gwc"):
             for gridset in settings.GWC_GRIDSETS:
                 if not any(gridsetdata["gridSetName"] == gridset  for gridsetdata in self.result["gwc"]["gridSubsets"]):
-                    msg = "{}{}{}".format(msg or "", "\r\n" if msg else "","The gridset({}) was not configured".format(gridset))
-            #if not self.result["gwc"]["enabled"]:
-            #    msg = "{}{}{}".format(msg or "", "\r\n" if msg else "","The GWC was disabled.")
+                    msg.append("The gridset({}) was not configured".format(gridset))
+            if not self.result["gwc"]["enabled"]:
+                msg.append("{}\r\n{}".format("The GWC is disabled."))
             if self.result["gwc"].get("expireCache",0) < 0:
-                msg = "{}{}{}".format(msg or "", "\r\n" if msg else "","The GWC server cache was disabled.")
+                msg.append("The GWC server cache was disabled.")
                 level = self.ERROR
             if self.result["gwc"].get("expireClients",0) > settings.MAX_EXPIRE_CLIENTS:
-                msg = "{}{}{}".format(msg or "", "\r\n" if msg else "","The GWC client cache is greater than {} seconds".format(settings.MAX_EXPIRE_CLIENTS_STR))
+                msg.append("The GWC client cache is greater than {} seconds".format(settings.MAX_EXPIRE_CLIENTS_STR))
 
         if msg:
-            yield (level,msg)
+            yield (level,"\r\n".join(msg))
 
     def _format_result(self):
         return json.dumps(self.result,indent=4) if self.result else "{}"
@@ -108,6 +116,7 @@ class GetFeatureTypeDetail(Task):
     def _exec(self,geoserver):
         result = {"geometry":None}
         #get the feature details
+        detail = None
         detail = geoserver.get_featuretype(self.workspace,self.featuretype)
         for k in ["nativeName","title","abstract","srs","nativeBoundingBox","latLonBoundingBox","enabled","attributes"]:
             if not detail.get(k):
@@ -132,20 +141,17 @@ class GetFeatureTypeDetail(Task):
             elif isinstance(result["latLonBoundingBox"]["crs"],dict):
                 result["latLonBoundingBox"]["crs"] = result["latLonBoundingBox"]["crs"]["$"]
                 
-            if result["latLonBoundingBox"]["crs"].upper() not in ("EPSG:4326","EPSG:4283"):
-                #tranform the bbox to epsg:4326
-                result["originalLatLonBoundingBox"] = dict(result["latLonBoundingBox"])
-                transformer = Transformer.from_crs(result["latLonBoundingBox"]["crs"], "EPSG:4326")
-                result["latLonBoundingBox"]["miny"], result["latLonBoundingBox"]["minx"] = transformer.transform(result["latLonBoundingBox"]["miny"], result["latLonBoundingBox"]["minx"])
-                result["latLonBoundingBox"]["maxy"], result["latLonBoundingBox"]["maxx"] = transformer.transform(result["latLonBoundingBox"]["maxy"], result["latLonBoundingBox"]["maxx"])
-
         #get the feature styles
         styles = geoserver.get_featuretype_styles(self.workspace,self.featuretype)
         result["defaultStyle"] = (":".join(styles[0]) if styles[0][0] else styles[0][1]) if styles else None
         result["alternativeStyles"] = [("{}:{}".format(w,style) if w else style)  for w,style in styles[1]] if styles and styles[1] else []
         result["alternativeStyles"].sort()
         #get the gwc details
-        detail = geoserver.get_gwclayer(self.workspace,self.featuretype)
+        detail = None
+        try:
+            detail = geoserver.get_gwclayer(self.workspace,self.featuretype)
+        except ResourceNotFound as ex:
+            pass
         if detail:
             result["gwc"] = {}
             for k in ["expireClients","expireCache","gridSubsets","enabled"]:
@@ -162,11 +168,12 @@ class GetFeatureCount(Task):
     keyarguments = ("workspace","datastore","featuretype")
     category = "Get Feature Count"
 
-    def __init__(self,workspace,datastore,featuretype,post_actions_factory = None):
+    def __init__(self,workspace,datastore,featuretype,featuredetails,post_actions_factory = None):
         super().__init__(post_actions_factory = post_actions_factory) 
         self.workspace = workspace
         self.datastore = datastore
         self.featuretype = featuretype
+        self.featuredetails = featuredetails
 
     def _format_result(self):
         return "Features = {}".format(self.result if self.result else 0)
@@ -183,49 +190,73 @@ class GetFeatures(Task):
     category = "Get Features"
     url = None
 
-    def __init__(self,workspace,datastore,featuretype,featuredetail,post_actions_factory = None):
+    def __init__(self,workspace,datastore,featuretype,featuredetails,post_actions_factory = None):
         super().__init__(post_actions_factory = post_actions_factory) 
         self.workspace = workspace
         self.datastore = datastore
         self.featuretype = featuretype
-        self.featuredetail = featuredetail
+        self.featuredetails = featuredetails
 
     @property
     def srs(self):
-       return self.featuredetail.get("srs")
+       return self.featuredetails.get("srs")
 
     @property
     def bbox(self):
-       return [self.featuredetail["latLonBoundingBox"][k] for k in ("minx","miny","maxx","maxy")]
+       return [self.featuredetails["latLonBoundingBox"][k] for k in ("minx","miny","maxx","maxy")]
 
     @property
     def count(self):
         return settings.TEST_FEATURES_COUNT
 
     def _format_result(self):
-        return "URL : {} \r\nTotal Features : {} , Matched Features : {} , Returned Features : {} , BBOX : {}".format(
-            self.url or "",
-            self.result.get("totalFeatures",0) if self.result else 0,
-            self.result.get("numberMatched",0) if self.result else 0,
-            self.result.get("numberReturned",0) if self.result else 0,
-            ",".join(str(d) for d in self.result["bbox"]) if self.result and self.result.get("bbox") else ""
-            )
+        if self.result:
+            return "URL : {} \r\nTotal Features : {} , Matched Features : {} , Returned Features : {} , BBOX : {}".format(
+                self.url or "",
+                self.result.get("totalFeatures",0) if self.result else 0,
+                self.result.get("numberMatched",0) if self.result else 0,
+                self.result.get("numberReturned",0) if self.result else 0,
+                ",".join(str(d) for d in self.result["bbox"]) if self.result and self.result.get("bbox") else ""
+                )
+        elif self.url:
+            return "URL : {}".format(self.url)
+        else:
+            return None
 
     def _exec(self,geoserver):
-        if self.featuredetail["geometry"]:
-            self.url = geoserver.features_url(
-                self.workspace,
-                self.featuretype,
-                count=self.count,
-                srs=self.srs
-            )
-            return geoserver.get_features(
-                self.workspace,
-                self.featuretype,
-                storename=self.datastore,
-                count=self.count,
-                srs=self.srs
-            )
+        if self.featuredetails["geometry"]:
+            try:
+                self.url = geoserver.features_url(
+                    self.workspace,
+                    self.featuretype,
+                    count=self.count,
+                    srs=self.srs,
+                    bbox=self.bbox
+                )
+                return geoserver.get_features(
+                    self.workspace,
+                    self.featuretype,
+                    storename=self.datastore,
+                    count=self.count,
+                    srs=self.srs,
+                    bbox=self.bbox
+                )
+            except Exception as ex:
+                self._messages = [(self.WARNING,"Failed to get the features. URL={}\n {}:{}".format(self.url,ex.__class__.__name__,ex))]
+                self.url = geoserver.features_url(
+                    self.workspace,
+                    self.featuretype,
+                    count=self.count,
+                    srs=self.srs
+                )
+                return geoserver.get_features(
+                    self.workspace,
+                    self.featuretype,
+                    storename=self.datastore,
+                    count=self.count,
+                    srs=self.srs
+                )
+
         else:
             self.url = geoserver.features_url(
                 self.workspace,
@@ -239,25 +270,14 @@ class GetFeatures(Task):
                 count=self.count
             )
 
-def createtasks_ListFeatureTypes(task,limit = 0):
+def createtasks_ListFeatureTypes(getDatastoreTask,limit = 0):
     """
     a generator to return featuretypes tasks
     """
-    if isinstance(task,ListDatastores):
-        result = task.result
-    elif isinstance(task,ListResourcesInWorkspace):
-        result = (task.result[0] or []) if task.result else []
-    else:
-        return
 
-    if not result:
+    if not getDatastoreTask.result:
         return
-    row = 0
-    for store in result:
-        row += 1
-        if limit > 0 and row > limit:
-            break
-        yield ListFeatureTypes(task.workspace,store,post_actions_factory=task.post_actions_factory)
+    yield ListFeatureTypes(getDatastoreTask.workspace,getDatastoreTask.datastore,getDatastoreTask.result,post_actions_factory=getDatastoreTask.post_actions_factory)
 
 
 def createtasks_GetFeatureTypeDetail(listFeatureTypesTask,limit = 0):
@@ -271,22 +291,27 @@ def createtasks_GetFeatureTypeDetail(listFeatureTypesTask,limit = 0):
         row += 1
         if limit > 0 and row > limit:
             break
-        yield GetFeatureTypeDetail(listFeatureTypesTask.workspace,listFeatureTypesTask.datastore,featuretype,post_actions_factory=listFeatureTypesTask.post_actions_factory)
+        yield GetFeatureTypeDetail(listFeatureTypesTask.workspace,listFeatureTypesTask.datastore,featuretype,listFeatureTypesTask.storedetails,post_actions_factory=listFeatureTypesTask.post_actions_factory)
 
 
-def createtasks_GetFeatureCount(listFeatureTypesTask,limit = 0):
+def createtasks_GetFeatureCount(getFeatureTypeDetailTask,limit = 0):
     """
     a generator to return featuretype styles tasks
     """
-    if not listFeatureTypesTask.result:
+    if not getFeatureTypeDetailTask.result:
         return
-    row = 0
-    for featuretype in listFeatureTypesTask.result:
-        row += 1
-        if limit > 0 and row > limit:
-            break
-        yield GetFeatureCount(listFeatureTypesTask.workspace,listFeatureTypesTask.datastore,featuretype,post_actions_factory=listFeatureTypesTask.post_actions_factory)
 
+    if not getFeatureTypeDetailTask.enabled:
+        return
+
+    yield GetFeatureCount(
+        getFeatureTypeDetailTask.workspace,
+        getFeatureTypeDetailTask.datastore,
+        getFeatureTypeDetailTask.featuretype,
+        getFeatureTypeDetailTask.result,
+        post_actions_factory=listFeatureTypesTask.post_actions_factory
+    )
+    
 
 def createtasks_GetFeatures(getFeatureTypeDetailTask,limit = 0):
     """
@@ -294,6 +319,10 @@ def createtasks_GetFeatures(getFeatureTypeDetailTask,limit = 0):
     """
     if not getFeatureTypeDetailTask.result:
         return
+
+    if not getFeatureTypeDetailTask.enabled:
+        return
+
     layer_bbox = getFeatureTypeDetailTask.result.get("latLonBoundingBox")
     if not layer_bbox or any(layer_bbox.get(k) is None for k in ("minx","miny","maxx","maxy")):
         return

@@ -24,6 +24,7 @@ class Task(object):
     keyarguments = None
     post_actions_factory = None
 
+    _messages = None
     def __init__(self,post_actions_factory = None):
         self.retries = settings.TASK_RETRIES.get(self.__class__.__name__,1)
         if self.retries < 1:
@@ -56,12 +57,17 @@ class Task(object):
 
     @property
     def exec_result(self):
-        msg = ""
-        if self.is_succeed:
+        msg = None
+        try:
+            msg = self._format_result()
+        except:
+            pass
+
+        if msg:
             if self.exceptions:
-               return "{}\r\n{}".format(self._format_result(),"\r\n".join("{}({})".format(ex.__class__.__name__,str(ex)) for ex in self.exceptions))
+               return "{}\r\n{}".format(msg,"\r\n".join("{}({})".format(ex.__class__.__name__,str(ex)) for ex in self.exceptions))
             else:
-               return self._format_result()
+               return msg
         elif self.exceptions:
             return "\r\n".join("{}({})".format(ex.__class__.__name__,str(ex)) for ex in self.exceptions)
         else:
@@ -111,6 +117,16 @@ class Task(object):
             )
 
         if self.is_succeed:
+            for level,msg in (self._messages or []):
+                yield (self.category,
+                    self.format_parameters("\r\n"),
+                    level,
+                    timezone.format(self.starttime,"%Y-%m-%d %H:%M:%S.%f") if self.starttime else "",
+                    timezone.format(self.endtime,"%Y-%m-%d %H:%M:%S.%f") if self.endtime else "",
+                    (self.endtime - self.starttime).total_seconds() if self.starttime and self.endtime else "",
+                    msg
+                )
+
             for level,msg in (self._warnings() or []):
                 yield (self.category,
                     self.format_parameters("\r\n"),
@@ -119,14 +135,14 @@ class Task(object):
                     timezone.format(self.endtime,"%Y-%m-%d %H:%M:%S.%f") if self.endtime else "",
                     (self.endtime - self.starttime).total_seconds() if self.starttime and self.endtime else "",
                     msg
-            )
+                )
 
     def _warnings(self):
         """
         Report the warnings and errors from the task result
         return a generator to return (level,msg)
         """
-        pass
+        return None
 
     @property
     def status(self):
