@@ -103,8 +103,8 @@ LAYER_STYLES_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 </layer>
 """
 KEYWORD_TEMPLATE = """<string>{}</string>"""
-DEFAULT_STYLE_TEMPLATE = """<defaultStyle><name>{}</name></defaultStyle>"""
-STYLE_TEMPLATE = """<style><name>{}</name></style>"""
+DEFAULT_STYLE_TEMPLATE = """<defaultStyle><name>{0}:{1}</name><workspace>{0}</workspace></defaultStyle>"""
+STYLE_TEMPLATE = """<style><name>{0}:{1}</name><workspace>{0}</workspace></style>"""
 NATIVENAME_TEMPLATE = """<nativeName>{}</nativeName>"""
 
 class FeaturetypeMixin(object):
@@ -307,8 +307,8 @@ class FeaturetypeMixin(object):
     
     def set_featuretype_styles(self,workspace,layername,defaultstyle,styles):
         layer_styles_data = LAYER_STYLES_TEMPLATE.format(
-            DEFAULT_STYLE_TEMPLATE.format(defaultstyle) if defaultstyle else "",
-            os.linesep.join(STYLE_TEMPLATE.format(n) for n in styles) if styles else ""
+            DEFAULT_STYLE_TEMPLATE.format(workspace,defaultstyle) if defaultstyle else "",
+            os.linesep.join(STYLE_TEMPLATE.format(workspace,n) for n in styles) if styles else ""
         )
         res = self.put(self.layer_styles_url(workspace,layername),headers=self.contenttype_header("xml"),data=layer_styles_data)
     

@@ -20,7 +20,7 @@ from . import utils
 from .mail import EmailMessage
 from . import utils
 
-logger = logging.getLogger("geoserver_rest.geoserverhealthcheck")
+logger = logging.getLogger("geoserver_rest.geoservercompatibilitycheck")
 
 jinja_env = jinja2.Environment(
     loader=jinja2.FileSystemLoader([settings.BASE_DIR]),
@@ -37,7 +37,6 @@ class GeoserverCompatibilityCheck(object):
     sufix = "4compatibilitycheck"
     
     def __init__(self,geoserver_url,geoserver_user,geoserver_password,requestheaders=None):
-        utils.init_logging()
         self.geoserver = Geoserver(geoserver_url,geoserver_user,geoserver_password,headers=requestheaders)
         self._resources = OrderedDict()
         self._checklist = OrderedDict()
@@ -160,7 +159,7 @@ class GeoserverCompatibilityCheck(object):
         if all(os.environ.get(key) is not None  for key in ("POSTGIS_GEOMETRY_COLUMN","POSTGIS_GEOMETRY_TYPE","POSTGIS_TABLE")):
             workspaces.append("postgisview{}".format(self.sufix))
 
-        if workspaces:
+        if os.environ.get("WMSSERVER_CAPABILITIESURL"):
             workspaces.append("wms{}".format(self.sufix))
 
         for wsname in workspaces:
@@ -170,13 +169,10 @@ class GeoserverCompatibilityCheck(object):
                     self._update_checklist("workspace","create",[True,"Succeed to create the workspace '{}'".format(wsname)])
                     self._add_container_resource("workspaces",wsname)
                     self._update_checklist("workspace","create",self.post_create_workspace(wsname))
-                    return True
                 else:
                     self._update_checklist("workspace","create" ,[False,"Failed to create workspace '{}'".format(wsname)])
-                    return False
             except Exception as ex:
                 self._update_checklist("workspace","create" ,[False,"Failed to create workspace '{}'. {}".format(wsname,ex)])
-                return False
 
     def post_create_workspace(self,wsname):
         """
@@ -273,7 +269,7 @@ class GeoserverCompatibilityCheck(object):
                     for k,v in parameters.items():
                         if k == "passwd":
                             continue
-                        if self.geoserver.get_datastore_field(storedata,k) != str(v):
+                        if str(self.geoserver.get_datastore_field(storedata,k)) != str(v):
                             raise Exception("The field({1}) of the datastore({0}) should be {3} instead of {2}".format(storename,k,v,self.geoserver.get_datastore_field(storedata,k)))
                     self._add_container_resource("workspaces",wsname,"datastores",storename,parameters=parameters)
                     self._update_checklist("datastore",operation,[True,"Succeed to create the datastore '{}.{}' for postgis db".format(wsname,storename)])
@@ -313,7 +309,7 @@ class GeoserverCompatibilityCheck(object):
                     for k,v in parameters.items():
                         if k == "passwd":
                             continue
-                        if self.geoserver.get_datastore_field(storedata,k) != str(v):
+                        if str(self.geoserver.get_datastore_field(storedata,k)) != str(v):
                             raise Exception("The field({1}) of the datastore({0}) should be {3} instead of {2}".format(storename,k,v,self.geoserver.get_datastore_field(storedata,k)))
 
                     self._update_checklist("datastore",operation,[True,"Succeed to update the datastore '{}.{}' for postgis db".format(wsname,storename)])
@@ -344,7 +340,7 @@ class GeoserverCompatibilityCheck(object):
     def post_delete_datastore(self,wsname,storename):
         return None
 
-    def create_styles(self):
+    def create_style(self):
         #find the style folder and layer name
         for wsname,wsdata in self._resources.get("workspaces",{}).items():
             for storename,storedata in wsdata.get("datastores",{}).items():
@@ -396,7 +392,7 @@ class GeoserverCompatibilityCheck(object):
     def post_create_style(self,wsname,stylename,styleversion,styledata):
         return None
 
-    def update_styles(self):
+    def update_style(self):
         for wsname,wsdata in self._resources.get("workspaces",{}).items():
             for storename,storedata in wsdata.get("datastores",{}).items():
                 if storename == "__parameters__":
@@ -429,24 +425,25 @@ class GeoserverCompatibilityCheck(object):
                         if filecmp.cmp(image_defaultstyle,image_style):
                             raise Exception("The image of layer({}.{}.{}) from different style should be different.".format(wsname,storename,layername))
                         #update style
-                        self.geoserver.update_style(wsname,defaultstyle,*self._resources[wsname]["styles"][layername][style]["__parameters__"])
+                        self.geoserver.update_style(wsname,defaultstyle,self._resources["workspaces"][wsname]["styles"][layername][style]["__parameters__"]["version"],self._resources["workspaces"][wsname]["styles"][layername][style]["__parameters__"]["style"])
                         image_defaultstyle_updated = self.geoserver.get_map(wsname,layername,bbox,srs=srs,width=1024,height=1024,format="image/jpeg")
                         if not filecmp.cmp(image_defaultstyle_updated,image_style):
                             raise Exception("The image of layer({}.{}.{}) with same style  should be same. style={}".format(wsname,storename,layername,style))
                         else:
-                            self._update_checklist("style","update",[True,"Succeed to update the style '{}.{}.{}'".format(wsname,layername,stylename)])
+                            self._update_checklist("style","update",[True,"Succeed to update the style '{}.{}.{}'".format(wsname,layername,defaultstyle)])
                             self.post_update_style(wsname,layername,defaultstyle)
 
                         #restore the updated style
-                        self.geoserver.update_style(wsname,defaultstyle,sekf._resources[wsname]["styles"][layername][defaultstyle]["__parameters__"])
+                        self.geoserver.update_style(wsname,defaultstyle,self._resources["workspaces"][wsname]["styles"][layername][defaultstyle]["__parameters__"]["version"],self._resources["workspaces"][wsname]["styles"][layername][defaultstyle]["__parameters__"]["style"])
+                        
                         image_defaultstyle_restored = self.geoserver.get_map(wsname,layername,bbox,srs=srs,width=1024,height=1024,format="image/jpeg")
-                        if not filecmp.cmp(image_defaultstyle_resoted,image_defaultstyle):
+                        if not filecmp.cmp(image_defaultstyle_restored,image_defaultstyle):
                             raise Exception("The image of layer({}.{}.{}) with same style  should be same.style={}".format(wsname,storename,layername,defaultstyle))
                         else:
                             self._update_checklist("style","update",[True,"Succeed to restore the style '{}.{}.{}'".format(wsname,layername,defaultstyle)])
                             self.post_update_style(wsname,layername,defaultstyle)
                     except Exception as ex:
-                        self._update_checklist("style","update",[False,"Failed to update the style '{}.{}.{}'. {}".format(wsname,layername,defaultstyle,ex)])
+                        self._update_checklist("style","update",[False,"Failed to update the style '{}.{}.{}'. {}:{}".format(wsname,layername,defaultstyle,ex.__class__.__name__,ex)])
                     finally:
                         if image_defaultstyle:
                             utils.remove_file(image_defaultstyle)
@@ -460,7 +457,7 @@ class GeoserverCompatibilityCheck(object):
     def post_update_style(self,wsname,layername,stylename):
         return None
 
-    def delete_styles(self):
+    def delete_style(self):
         for wsname,wsdata in self._resources.get("workspaces",{}).items():
             for layername,styles in wsdata.get("styles",{}).items():
                 if layername == "__parameters__":
@@ -675,13 +672,16 @@ class GeoserverCompatibilityCheck(object):
         """
         Use the same geoserver as the upstream server
         """
+        if not os.environ.get("WMSSERVER_CAPABILITIESURL"):
+            return
+
         wsname = "wms{}".format(self.sufix)
         try:
             storename = "wmsstore{}".format(self.sufix)
             parameters = {
-                "capabilitiesURL": "{}/ows?service=WMS&version=1.1.1&request=GetCapabilities".format(os.environ.get("GEOSERVER_URL")),
-                "user": os.environ.get("GEOSERVER_USER",None),
-                "password": os.environ.get("GEOSERVER_PASSWORD",None),
+                "capabilitiesURL": os.environ.get("WMSSERVER_CAPABILITIESURL"),
+                "user": os.environ.get("WMSSERVER_USER",None),
+                "password": os.environ.get("WMSSERVER_PASSWORD",None),
                 "maxConnections": 10,
                 "readTimeout": 300,
                 "connectTimeout": 60
@@ -690,23 +690,20 @@ class GeoserverCompatibilityCheck(object):
             if self.geoserver.has_wmsstore(wsname,storename):
                 storedata = self.geoserver.get_wmsstore(wsname,storename)
                 for key in ("maxConnections","readTimeout","connectTimeout"):
-                    if self.geoserver.get_wmsstore_field(storedata,key) != str(parameters[key]):
+                    if str(self.geoserver.get_wmsstore_field(storedata,key)) != str(parameters[key]):
                         raise Exception("The the parameter({2}) of the wmsstore({0}.{1}) should be instead of {3}".format(wsname,storename,parameters[key],self.geoserver.get_wmsstore_field(storedata,key)))
                 self._add_container_resource("workspaces",wsname,"wmsstores",storename,parameters=parameters)
                 self._update_checklist("wmsstore","create",[True,"Succeed to create the wmsstore '{}.{}'".format(wsname,storename)])
                 self._update_checklist("wmsstore","create",self.post_create_wmsstore(wsname,storename,parameters))
-                return storename
             else:
                 self._update_checklist("wmsstore","create",[False,"Failed to create the wmsstore '{}.{}'".format(wsname,storename)])
-                return None
         except Exception as ex:
             self._update_checklist("wmsstore","create",[False,"Failed to create the wmsstore '{}.{}'. {}".format(wsname,storename,ex)])
-            return None
 
     def post_create_wmsstore(self,wsname,storename,parameters):
         pass
 
-    def update_wmstore(self):
+    def update_wmsstore(self):
         operation = "update"
         for wsname,wsdata in self._resources.get("workspaces",{}).items():
             if wsname == "__parameters__":
@@ -714,24 +711,22 @@ class GeoserverCompatibilityCheck(object):
             for storename,storedata in wsdata.get("wmsstores",{}).items():
                 if storename == "__parameters__":
                     continue
-                original_parameters = storedata["__parameters__"]
-                parameters = {}
+                parameters = storedata["__parameters__"]
                 for key in ("maxConnections","readTimeout","connectTimeout"):
-                    original_parameters[key] = original_parameters[key] + 10
-                    parameters[key] = original_parameters[key]
+                    parameters[key] = parameters[key] + 10
 
                 try:
-                    self.geoserver.update_wmsstore(wsname,storename,parameters,create=True)
+                    self.geoserver.update_wmsstore(wsname,storename,parameters,create=False)
                     wmsstoredata = self.geoserver.get_wmsstore(wsname,storename)
                     for key in ("maxConnections","readTimeout","connectTimeout"):
-                        if self.geoserver.get_wmsstore_field(wmsstoredata,key) != str(parameters[key]):
+                        if str(self.geoserver.get_wmsstore_field(wmsstoredata,key)) != str(parameters[key]):
                             raise Exception("The the parameter({2}) of the wmsstore({0}.{1}) should be instead of {3}".format(wsname,storename,parameters[key],self.geoserver.get_wmsstore_field(wmsstoredata,key)))
                     self._update_checklist("wmsstore",operation,[True,"Succeed to update wms store '{}.{}'".format(wsname,storename)])
                     self._update_checklist("wmsstore",operation,self.post_update_wmsstore(wsname,storename,parameters))
                 except Exception as ex:
                     self._update_checklist("wmsstore",operation,[False,"Failed to update wms store '{}.{}'. {}".format(wsname,storename,ex)])
 
-    def post_update_wmsstore(wsname,storename,parameters):
+    def post_update_wmsstore(self,wsname,storename,parameters):
         return None
 
     def delete_wmsstore(self):
@@ -754,70 +749,77 @@ class GeoserverCompatibilityCheck(object):
     def post_delete_wmsstore(self,wsname,storename):
         pass
 
-    def publish_wmslayer(self,wsname,storename):
+    def publish_wmslayer(self):
         """
         Publish a wmslayer from upstream layer
         wmslayer should be published to a separate workspace
         Return the published layers if succeed; otherwise return None
         """
-        for workspace,workspacedata in self._resources.get("workspaces",{}).items():
-            if wsname == "__parameters__":
-                continue
-            if workspace == wsname:
-                continue
-            for dsname, dsdata in workspacedata.get("datastores",[]).items():
-                if dsname == "__parameters__":
-                    continue
-                for layername in dsdata.keys():
-                    if layername == "__parameters__":
-                        continue
-                    try:
-                        parameters = {
-                            "nativeName": "{}:{}".format(workspace,layername)
-                        }
-                        self.geoserver.update_wmslayer(wsname,storename,layername,parameters,True)
-                        if self.geoserver.has_wmslayer(wsname,layername,storename=storename):
-                            self._add_container_resource("workspaces",wsname,"wmsstores",storename,layername,parameters=parameters)
-                            self._update_checklist("wmslayer","create",[True,"Succeed to publish the wms layer '{}.{}.{}'".format(wsname,storename,layername)])
-                            self.post_publish_wmslayer(wsname,storename,layername,parameters)
-                            return layername
-                        else:
-                            self._update_checklist("wmslayer","create",[False,"Failed to publish the wms layer '{}.{}.{}'".format(wsname,storename,layername)])
-                            continue
-                    except Exception as ex:
-                        self._update_checklist("wmslayer","create",[False,"Failed to publish the wms layer '{}.{}.{}'. {}".format(wsname,storename,layername,ex)])
-                        continue
+        layer = os.environ.get("WMSLAYER","").strip()
+        if not layer:
+            return
+        wsname,layername = layer.split(":",1)
 
-        return None
+        wmslayers = {}
+        for workspace,workspacedata in self._resources.get("workspaces",{}).items():
+            wmslayers.clear()
+            for wmsstorename,wmsstoredata in workspacedata.get("wmsstores",{}).items():
+                if wmsstorename == "__parameters__":
+                    continue
+
+                if layername in wmslayers:
+                    wmslayername = "{}_{}".format(layername,wmslayers[layername])
+                    wmslayers[layername] += 1
+                else:
+                    wmslayers[layername] = 1
+                    wmslayername = layername
+
+                try:
+                    parameters = {
+                        "nativeName": "{}:{}".format(wsname,layername),
+                        "title": "{}:{}".format(wsname,layername),
+                        "abstract": "{}:{}".format(wsname,layername),
+                        "description": "{}:{}".format(wsname,layername),
+                    }
+                    self.geoserver.update_wmslayer(workspace,wmsstorename,wmslayername,parameters,True)
+                    if self.geoserver.has_wmslayer(workspace,wmslayername,storename=wmsstorename):
+                        self._add_container_resource("workspaces",workspace,"wmsstores",wmsstorename,wmslayername,parameters=parameters)
+                        self._update_checklist("wmslayer","create",[True,"Succeed to publish the wms layer '{}.{}.{}'".format(workspace,wmsstorename,wmslayername)])
+                        self.post_publish_wmslayer(wsname,wmsstorename,layername,parameters)
+                    else:
+                        self._update_checklist("wmslayer","create",[False,"Failed to publish the wms layer '{}.{}.{}'".format(workspace,wmsstorename,wmslayername)])
+                        continue
+                except Exception as ex:
+                    self._update_checklist("wmslayer","create",[False,"Failed to publish the wms layer '{}.{}.{}'. {}:{}".format(workspace,wmsstorename,wmslayername,ex.__class__.__name__,ex)])
+                    continue
+
 
     def post_publish_wmslayer(self,wsname,storename,layername,parameters):
         pass
     
-    def update_wmslayers(self):
+    def update_wmslayer(self):
         operation = "update"
         for wsname,wsdata in self._resources.get("workspaces",{}).items():
-            if wsname == "__parameters__":
-                continue
             for storename,storedata in wsdata.get("wmsstores",{}).items():
                 if storename == "__parameters__":
                     continue
-                for layername,layerdata in storename.items():
+                for layername,layerdata in storedata.items():
                     if layername == "__parameters__":
                         continue
                     original_parameters = layerdata["__parameters__"]
                     parameters = {}
-                    for key in ("tile","abstract","description"):
+                    for key in ("title","abstract","description"):
                         original_parameters[key] = "{} changed".format(original_parameters[key])
                         parameters[key] = original_parameters[key]
 
                     try:
                         self.geoserver.update_wmslayer(wsname,storename,layername,parameters,create=False)
-                        wmslayerdata = self.geoserver.get_wmsstore(wsname,storename)
+                        wmslayerdata = self.geoserver.get_wmslayer(wsname,layername,storename = storename)
                         for key in ("title","abstract","description"):
                             if self.geoserver.get_wmslayer_field(wmslayerdata,key) != parameters[key]:
-                                raise Exception("The the parameter({3}) of the wmslayer({0}.{1}.{2}) should be instead {4} of {5}".format(wsname,storename,layername,key,parameters[key],self.geoserver.get_wmslayer_field(wmslayerdata,key)))
+                                raise Exception("The the parameter({3}) of the wmslayer({0}.{1}.{2}) should be {4} instead of {5}".format(wsname,storename,layername,key,parameters[key],self.geoserver.get_wmslayer_field(wmslayerdata,key)))
 
-                        self._update_checklist("wmslayer",operation,[True,"Succeed to update the wms layer '{}.{}.{}'. {}".format(wsname,storename,layername,ex)])
+                        self._update_checklist("wmslayer",operation,[True,"Succeed to update the wms layer '{}.{}.{}'.".format(wsname,storename,layername)])
                         self._update_checklist("wmslayer",operation,self.post_update_wmslayer(wsname,storename,layername,parameters))
                     except Exception as ex:
                         self._update_checklist("wmslayer",operation,[False,"Failed to update the wms layer '{}.{}.{}'. {}".format(wsname,storename,layername,ex)])
@@ -825,7 +827,7 @@ class GeoserverCompatibilityCheck(object):
     def post_update_wmslayer(self,workspace,storename,layername,parameters):
         return None
 
-    def delete_wmslayers(self):
+    def delete_wmslayer(self):
         operation = "delete"
         for wsname,wsdata in self._resources.get("workspaces",{}).items():
             if wsname == "__parameters__":
@@ -833,11 +835,11 @@ class GeoserverCompatibilityCheck(object):
             for storename,storedata in wsdata.get("wmsstores",{}).items():
                 if storename == "__parameters__":
                     continue
-                for layername,layerdata in storename.items():
+                for layername,layerdata in storedata.items():
                     if layername == "__parameters__":
                         continue
                     try:
-                        self.geoserver.delete_wmslayer(wsname,layername)
+                        self.geoserver.delete_wmslayer(wsname,layername,recurse=True)
                         if self.geoserver.has_wmslayer(wsname,layername):
                             self._update_checklist("wmslayer",operation,[False,"Failed to delete the wms layer '{}.{}.{}'.".format(wsname,storename,layername)])
                         else:
@@ -849,34 +851,32 @@ class GeoserverCompatibilityCheck(object):
     def post_delete_wmslayer(self,wsname,storename,layername):
         return None
 
-    def create_layergroup(self,wsname):
+    def create_layergroup(self):
         """
         Create a layergroup 
         Return the layergroup if succeed;otherwise return None
         """
-        try:
-            parameters={"layers":[],"title":"for testing"}
-            groupname="layergroup{}".format(self.sufix)
-            for workspace,workspacedata in self._resource.get("workspaces").item():
-                for dsname, dsdata in workspacedata.get("datastores",[]).items():
+        parameters={"layers":[],"title":"for testing"}
+        groupname="layergroup{}".format(self.sufix)
+        for workspace,workspacedata in self._resources.get("workspaces").items():
+            try:
+                parameters={"layers":[],"title":"for testing"}
+                for dsname, dsdata in workspacedata.get("datastores",{}).items():
                     for layername in dsdata.keys():
+                        if layername == "__parameters__":
+                            continue
                         parameters["layers"].append({"type":"layer","name":layername,"workspace":workspace})
 
-            if parameters["layers"]:
-                self.geoserver.update_layergroup(wsname,groupname,parameters,create=true)
-                if self.geoserver.has_wmslayer(wsname,layername,storename=storename):
-                    self._set_resource(parameters,"workspaces",wsname,"layergroups",groupname)
-                    self._update_checklist("layergroup","create",[True,"Succeed to create layergroup '{}.{}'".format(wsname,layername)])
-                    self.post_create_layergroup(wsname,groupname,parameters)
-                    return groupname
-                else:
-                    self._update_checklist("layergroup","create",[False,"Failed to create layergroup '{}.{}'".format(wsname,layername)])
-                    return None
-            else:
-                return None
-        except Exception as ex:
-            self._update_checklist("layergroup","create",[False,"Failed to create layergroup '{}.{}'. {}".format(wsname,layername,ex)])
-            return None
+                if parameters["layers"]:
+                    self.geoserver.update_layergroup(workspace,groupname,parameters,create=True)
+                    if self.geoserver.has_layergroup(workspace,groupname):
+                        self._set_resource(parameters,"workspaces",workspace,"layergroups",groupname)
+                        self._update_checklist("layergroup","create",[True,"Succeed to create layergroup '{}.{}'".format(workspace,groupname)])
+                        self.post_create_layergroup(workspace,groupname,parameters)
+                    else:
+                        self._update_checklist("layergroup","create",[False,"Failed to create layergroup '{}.{}'".format(workspace,groupname)])
+            except Exception as ex:
+                self._update_checklist("layergroup","create",[False,"Failed to create layergroup '{}.{}'. {}".format(workspace,groupname,ex)])
 
     def post_create_layergroup(self,workspace,groupname,parameters):
         pass
@@ -890,14 +890,16 @@ class GeoserverCompatibilityCheck(object):
                 if groupname == "__parameters__":
                     continue
                 try:
-                    if len(parameters["layers"]) < 2:
-                         continue
                     parameters["layers"].sort(reverse=True)
                     parameters["title"] = "{} changed".format(parameters.get("title","for testing"))
                     self.geoserver.update_layergroup(wsname,groupname,parameters,create=False)
                     layergroupdata = self.geoserver.get_layergroup(wsname,groupname)
                     for key in ("title","layers"):
-                        if self.geoserver.get_layergroup_field(layergroupdata,key) != parameters[key]:
+                        if key == "layers":
+                            val = [ (layer["type"],layer["workspace"],layer["name"]) for layer in parameters["layers"]]
+                        else:
+                            val = parameters[key]
+                        if self.geoserver.get_layergroup_field(layergroupdata,key) != val:
                             raise Exception("The the parameter({2}) of the layergroup({0}.{1}) should be {3} instead of {4}".format(wsname,groupname,key,parameters[key],self.geoserver.get_layergroup_field(layergroupdata,key)))
                     
                     self._update_checklist("layergroup","update",[True,"Succeed to update layergroup '{}.{}'".format(wsname,groupname)])
@@ -905,7 +907,7 @@ class GeoserverCompatibilityCheck(object):
                 except Exception as ex:
                     self._update_checklist("layergroup","update",[False,"Failed to update layergroup '{}.{}'. {}".format(wsname,groupname,ex)])
 
-    def post_update_layergroup(workspace,groupname,parameters):
+    def post_update_layergroup(self,workspace,groupname,parameters):
         return None
 
     def delete_layergroup(self):
@@ -1343,17 +1345,33 @@ class GeoserverCompatibilityCheck(object):
     def update_userpassword(self):
         password = "12345678"
         operation = "change password"
+        failed_users = []
         for user,userdata in self._resources.get("users",{}).items():
             try:
+                password = "{}_newpassword".format(userdata["password"])
                 self.geoserver.change_userpassword(user,password)
-                if self.geoserver.login(user,password):
-                    userdata["password"] = password
-                    self._update_checklist("user",operation,[True,"Succeed to change the password of the user '{}'".format(user)])
-                    self._update_checklist("user",operation,self.post_change_userpassword(user,password))
-                else:
-                    self._update_checklist("user",operation,[False,"Failed to change the password of the user '{}'".format(user)])
             except Exception as ex:
                 self._update_checklist("user",operation,[False,"Failed to change the password of the user '{}'. {}".format(user,ex)])
+                failed_users.append(user)
+
+        #clean the cache to expire the old password
+        if len(self._resources.get("users",{})) > len(failed_users):
+            self.geoserver.reload()
+
+            for user,userdata in self._resources.get("users",{}).items():
+                if user in failed_users:
+                    continue
+                try:
+                    password = "{}_newpassword".format(userdata["password"])
+                    if not self.geoserver.login(user,userdata["password"]) and self.geoserver.login(user,password):
+                        userdata["password"] = password
+                        self._update_checklist("user",operation,[True,"Succeed to change the password of the user '{}'".format(user)])
+                        self._update_checklist("user",operation,self.post_change_userpassword(user,password))
+                    else:
+                        self._update_checklist("user",operation,[False,"Failed to change the password of the user '{}'".format(user)])
+                except Exception as ex:
+                    self._update_checklist("user",operation,[False,"Failed to change the password of the user '{}'. {}".format(user,ex)])
+
 
     def post_change_userpassword(self,user,password):
         return None
@@ -1582,7 +1600,7 @@ class GeoserverCompatibilityCheck(object):
                 self._update_checklist("layer_access_permission",operation,[True,"Succeed to grant the layer access permission {}.".format(access_rules)])
                 self._update_checklist("layer_access_permission",operation,self.post_grant_layer_access_permission(access_rules))
             else:
-                self._update_checklist("layer_access_permission",operation,[False,"Failed to grant the layer access permission {}.".format(access_rules)])
+                self._update_checklist("layer_access_permission",operation,[False,"Failed to grant the layer access permission.revoked access rules:{} , original access rules:{} , access rules after revoking:{}".format(access_rules,original_rules,latest_rules)])
         except Exception as ex:
             self._update_checklist("layer_access_permission",operation,[False,"Failed to grant the layer access permission {}. {}".format(access_rules,ex)])
 
@@ -1599,7 +1617,10 @@ class GeoserverCompatibilityCheck(object):
         try:
             original_rules = self.geoserver.get_layer_access_rules()
             for p in delete_permissions:
-                del original_rules[p]
+                if p in original_rules:
+                    del original_rules[p]
+                else:
+                    raise KeyError("Can't find permission({1}) in access rules({0})".format(original_rules,p))
             self.geoserver.patch_layer_access_rules(delete_permissions=delete_permissions)
             latest_rules = self.geoserver.get_layer_access_rules()
             if original_rules == latest_rules:
@@ -1608,36 +1629,73 @@ class GeoserverCompatibilityCheck(object):
             else:
                 self._update_checklist("layer_access_permission",operation,[False,"Failed to revoke the layer access permission {}.".format(access_rules)])
         except Exception as ex:
-            self._update_checklist("layer_access_permission",operation,[False,"Failed to revoke the layer access permission {}. {}".format(access_rules,ex)])
+            self._update_checklist("layer_access_permission",operation,[False,"Failed to revoke the layer access permission {}. {}:{}".format(access_rules,ex.__class__.__name__,ex)])
         
 
 
     def post_revoke_layer_access_permission(self,delete_permissions):
         return None
 
+    def reset_checking_env(self):
+        #reset the test env
+        checkagain = False
+        for role in self.geoserver.list_roles():
+            if role.endswith(self.sufix):
+                print("Delete the testing role '{}'".format(role))
+                self.geoserver.delete_role(role)
+                checkagain = True
+
+        if checkagain:
+            for role in self.geoserver.list_roles():
+                if role.endswith(self.sufix):
+                    raise Exception("Failed to delete the testing role '{}'".format(role))
+            checkagain = False
+
+        for user in self.geoserver.list_users():
+            if user[0].endswith(self.sufix):
+                print("Delete the testing user '{}'".format(user[0]))
+                self.geoserver.delete_user(user[0])
+                checkagain = True
+
+        if checkagain:
+            for user in self.geoserver.list_users():
+                if user[0].endswith(self.sufix):
+                    raise Exception("Failed to delete the testing user '{}'".format(user[0]))
+            checkagain = False
+
+        for usergroup in self.geoserver.list_usergroups():
+            if usergroup.endswith(self.sufix):
+                print("Delete the testing usergroup '{}'".format(usergroup))
+                self.geoserver.delete_usergroup(usergroup)
+                checkagain = True
+
+        if checkagain:
+            for usergroup in self.geoserver.list_usergroups():
+                if usergroup.endswith(self.sufix):
+                    raise Exception("Failed to delete the testing usergroup '{}'".format(usergroup))
+            checkagain = False
+
+        for wsname in self.geoserver.list_workspaces():
+            if wsname.endswith(self.sufix):
+                print("Delete the testing workspace '{}'".format(wsname))
+                self.geoserver.delete_workspace(wsname,recurse=True)
+                checkagain = True
+
+        if checkagain:
+            for wsname in self.geoserver.list_workspaces():
+                if wsname.endswith(self.sufix):
+                    print("Failed to delete the testing workspace '{}'".format(wsname))
+            checkagain = False
+
+        self.post_reset_checking_env()
+
+    def post_reset_checking_env(self):
+        pass
+
 
     def run(self):
         try:
-            #reset the test env
-            for role in self.geoserver.list_roles():
-                if role.endswith(self.sufix):
-                    print("Delete the testing role '{}'".format(role))
-                    self.geoserver.delete_role(role)
-
-            for user in self.geoserver.list_users():
-                if user[0].endswith(self.sufix):
-                    print("Delete the testing user '{}'".format(user[0]))
-                    self.geoserver.delete_user(user[0])
-
-            for usergroup in self.geoserver.list_usergroups():
-                if usergroup.endswith(self.sufix):
-                    print("Delete the testing usergroup '{}'".format(usergroup))
-                    self.geoserver.delete_usergroup(usergroup)
-
-            for wsname in self.geoserver.list_workspaces():
-                if wsname.endswith(self.sufix):
-                    print("Delete the testing workspace '{}'".format(wsname))
-                    self.geoserver.delete_workspace(wsname,recurse=True)
+            self.reset_checking_env()
 
             self.create_usergroup()
 
@@ -1655,23 +1713,34 @@ class GeoserverCompatibilityCheck(object):
 
             self.create_workspace()
             self.grant_layer_access_permission()
-            self.revoke_layer_access_permission()
 
-            #self.create_localdatastore()
-            #self.create_postgisdatastore()
-            #self.update_postgisdatastore()
-            self.grant_layer_access_permission()
-            #self.publish_featuretype_from_localdatastore()
-            #self.publish_featuretype_from_postgis()
-            #self.create_styles()
-            #self.update_featuretype()
-            #self.update_featuretypestyles()
+            self.create_localdatastore()
+            self.create_postgisdatastore()
+            self.update_postgisdatastore()
+            self.publish_featuretype_from_localdatastore()
+            self.publish_featuretype_from_postgis()
+            self.create_style()
+            self.update_featuretype()
+            self.update_featuretypestyles()
 
-            #self.update_styles()
+            self.update_style()
 
-            #self.delete_featuretype()
-            #self.delete_styles()
-            #self.delete_datastore()
+            self.create_wmsstore()
+            self.update_wmsstore()
+
+            self.publish_wmslayer()
+            self.update_wmslayer()
+
+            self.create_layergroup()
+            self.update_layergroup()
+
+
+            self.delete_layergroup()
+            self.delete_wmslayer()
+            self.delete_featuretype()
+            self.delete_style()
+            self.delete_wmsstore()
+            self.delete_datastore()
             self.revoke_layer_access_permission()
             self.delete_workspace()
             self.delete_role()

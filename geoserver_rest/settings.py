@@ -1,6 +1,6 @@
 import os
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 DEBUG = os.environ.get("DEBUG","false").lower() == "true"
 DEFAULT_CHARSET = "utf-8"

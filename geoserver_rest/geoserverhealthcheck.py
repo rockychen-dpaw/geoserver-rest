@@ -269,13 +269,13 @@ class GeoserverHealthCheck(object):
     def start(self):
         self.taskrunner.start()
         self.starttime = timezone.localtime()
-        #basetask = CheckGeoserverAlive()
-        basetask = GetWMSLayerDetail("kaartdijin-boodja-private","WA_firescan","linescanner_SWIR_3-6_2",self.geoserver.get_wmsstore("kaartdijin-boodja-private","WA_firescan"))
+        basetask = CheckGeoserverAlive()
+        #basetask = GetWMSLayerDetail("kaartdijin-boodja-private","WA_firescan","linescanner_SWIR_3-6_2",self.geoserver.get_wmsstore("kaartdijin-boodja-private","WA_firescan"))
         self._reportwriteaction = self.write_report_action_factory(basetask)
         self._warningwriteaction = self.write_warning_action_factory(basetask)
 
-        #task = CheckGeoserverAlive(post_actions_factory = self.post_actions_factory)
-        task = GetFeatureTypeDetail("kaartdijin-boodja-private","CPT_DFES_BUSHFIRE_PRONE_AREAS","CPT_DFES_BUSHFIRE_PRONE_AREAS",self.geoserver.get_datastore("kaartdijin-boodja-private","CPT_DFES_BUSHFIRE_PRONE_AREAS"),post_actions_factory = self.post_actions_factory)
+        task = CheckGeoserverAlive(post_actions_factory = self.post_actions_factory)
+        #task = GetFeatureTypeDetail("kaartdijin-boodja-private","CPT_DFES_BUSHFIRE_PRONE_AREAS","CPT_DFES_BUSHFIRE_PRONE_AREAS",self.geoserver.get_datastore("kaartdijin-boodja-private","CPT_DFES_BUSHFIRE_PRONE_AREAS"),post_actions_factory = self.post_actions_factory)
         self.taskrunner.add_task(task)
 
 

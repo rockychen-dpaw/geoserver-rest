@@ -3,6 +3,7 @@ import os
 
 from ..geoserver import Geoserver
 from .. import utils
+from .. import loggingconfig
 
 class BaseTest(unittest.TestCase):
     _instance = None
@@ -24,7 +25,6 @@ class BaseTest(unittest.TestCase):
     def setUpClass(cls):
         print("=============================Begin to run unittest suit {}==========================================".format(cls.__name__))
         super().setUpClass()
-        utils.init_logging()
         cls.geoserver = Geoserver(os.environ.get("GEOSERVER_URL"),os.environ.get("GEOSERVER_USER"),os.environ.get("GEOSERVER_PASSWORD"))
 
     @classmethod

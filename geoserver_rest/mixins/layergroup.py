@@ -99,7 +99,13 @@ class LayergroupMixin(object):
         Return the value of field from layergroup json data
         """
         if field == "layers":
-            return [ (layer["@type"],*layer["name"].split(":",1)) if ":" in layer["name"] else (layer["@type"],layergroupdata["workspace"]["name"],layer["name"]) for layer in layergroupdata.get("publishables",{}).get("published",[])]
+            layers = layergroupdata.get("publishables",{}).get("published")
+            if not layers:
+                return []
+            elif isinstance(layers,list):
+                return [ (layer["@type"],*layer["name"].split(":",1)) if ":" in layer["name"] else (layer["@type"],layergroupdata["workspace"]["name"],layer["name"]) for layer in layers]
+            else:
+                return [ (layers["@type"],*layers["name"].split(":",1)) if ":" in layers["name"] else (layers["@type"],layergroupdata["workspace"]["name"],layers["name"])]
         elif field == "workspace":
             return layergroupdata["workspace"]["name"]
         elif field == "keywords":
@@ -118,7 +124,9 @@ class LayergroupMixin(object):
         """
         res = self.get(self.layergroups_url(workspace),headers=self.accept_header("json"))
         return [str(g["name"]) for g in (res.json().get("layerGroups") or {}).get("layerGroup") or [] ]
-    
+
+    def has_layergroup(self,workspace,groupname):
+        return groupname in self.list_layergroups(workspace)
     
     def delete_layergroup(self,workspace,groupname):
         """

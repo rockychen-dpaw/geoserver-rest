@@ -34,7 +34,7 @@ class WMSLayerTest(BaseTest):
             test_layername = "testlayer4unitest"
             parameters = {
                 "title": "For unitesting",
-                "nativeName": os.environ["WMSLAYER_NAME"]
+                "nativeName": os.environ["WMSLAYER"]
             }
             print("Try to create the wmslayer({}) for testing".format(test_layername))
             self.assertTrue(self.geoserver.update_wmslayer(test_workspace,test_storename,test_layername,parameters,True),"The wmslayer({}) should not exist before".format(test_layername))

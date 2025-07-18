@@ -81,6 +81,10 @@ class GetFeatureTypeDetail(Task):
     def enabled(self):
         return self.result and self.result.get("enabled") and self.storedetails.get("enabled")
 
+    @property
+    def gwcenabled(self):
+        return self.enabled and self.result.get("gwc",{}).get("enabled")
+
     def _warnings(self):
         msg = []
         level = self.WARNING
@@ -99,8 +103,8 @@ class GetFeatureTypeDetail(Task):
             for gridset in settings.GWC_GRIDSETS:
                 if not any(gridsetdata["gridSetName"] == gridset  for gridsetdata in self.result["gwc"]["gridSubsets"]):
                     msg.append("The gridset({}) was not configured".format(gridset))
-            if not self.result["gwc"]["enabled"]:
-                msg.append("{}\r\n{}".format("The GWC is disabled."))
+            if not self.result["gwc"].get("enabled"):
+                msg.append("The GWC is disabled.")
             if self.result["gwc"].get("expireCache",0) < 0:
                 msg.append("The GWC server cache was disabled.")
                 level = self.ERROR
@@ -168,12 +172,21 @@ class GetFeatureCount(Task):
     keyarguments = ("workspace","datastore","featuretype")
     category = "Get Feature Count"
 
-    def __init__(self,workspace,datastore,featuretype,featuredetails,post_actions_factory = None):
+    def __init__(self,workspace,datastore,featuretype,featuredetails,storedetails,post_actions_factory = None):
         super().__init__(post_actions_factory = post_actions_factory) 
         self.workspace = workspace
         self.datastore = datastore
         self.featuretype = featuretype
         self.featuredetails = featuredetails
+        self.storedetails = storedetails
+
+    @property
+    def enabled(self):
+        return self.featuredetails and self.featuredetails.get("enabled") and self.storedetails.get("enabled")
+
+    @property
+    def gwcenabled(self):
+        return self.enabled and self.featuredetails.get("gwc",{}).get("enabled")
 
     def _format_result(self):
         return "Features = {}".format(self.result if self.result else 0)
@@ -190,12 +203,21 @@ class GetFeatures(Task):
     category = "Get Features"
     url = None
 
-    def __init__(self,workspace,datastore,featuretype,featuredetails,post_actions_factory = None):
+    def __init__(self,workspace,datastore,featuretype,featuredetails,storedetails,post_actions_factory = None):
         super().__init__(post_actions_factory = post_actions_factory) 
         self.workspace = workspace
         self.datastore = datastore
         self.featuretype = featuretype
         self.featuredetails = featuredetails
+        self.storedetails = storedetails
+
+    @property
+    def enabled(self):
+        return self.featuredetails and self.featuredetails.get("enabled") and self.storedetails.get("enabled")
+
+    @property
+    def gwcenabled(self):
+        return self.enabled and self.featuredetails.get("gwc",{}).get("enabled")
 
     @property
     def srs(self):
@@ -309,6 +331,7 @@ def createtasks_GetFeatureCount(getFeatureTypeDetailTask,limit = 0):
         getFeatureTypeDetailTask.datastore,
         getFeatureTypeDetailTask.featuretype,
         getFeatureTypeDetailTask.result,
+        getFeatureTypeDetailTask.storedetails,
         post_actions_factory=listFeatureTypesTask.post_actions_factory
     )
     
@@ -332,6 +355,7 @@ def createtasks_GetFeatures(getFeatureTypeDetailTask,limit = 0):
         getFeatureTypeDetailTask.datastore,
         getFeatureTypeDetailTask.featuretype,
         getFeatureTypeDetailTask.result,
+        getFeatureTypeDetailTask.storedetails,
         post_actions_factory=getFeatureTypeDetailTask.post_actions_factory
     )
 

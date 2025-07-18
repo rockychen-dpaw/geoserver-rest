@@ -48,6 +48,10 @@ class GetLayergroupDetail(Task):
     def enabled(self):
         return self.result and self.result.get("enabled")
 
+    @property
+    def gwcenabled(self):
+        return self.enabled and self.result.get("gwc",{}).get("enabled")
+
     def _format_result(self):
         return json.dumps(self.result,indent=4) if self.result else "{}"
 
@@ -68,7 +72,7 @@ class GetLayergroupDetail(Task):
             for gridset in settings.GWC_GRIDSETS:
                 if not any(gridsetdata["gridSetName"] == gridset  for gridsetdata in self.result["gwc"]["gridSubsets"]):
                     msg.append("The gridset({}) was not configured".format(gridset))
-            if not self.result["gwc"]["enabled"]:
+            if not self.result["gwc"].get("enabled"):
                 msg.append("The GWC is disabled.")
             if self.result["gwc"].get("expireCache",0) < 0:
                 msg.append("The GWC server cache is disabled.")

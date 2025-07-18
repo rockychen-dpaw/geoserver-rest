@@ -85,6 +85,10 @@ class GetWMSLayerDetail(Task):
     def enabled(self):
         return self.result and self.result.get("enabled") and self.storedetails.get("enabled")
 
+    @property
+    def gwcenabled(self):
+        return self.enabled and self.result.get("gwc",{}).get("enabled")
+
     def _warnings(self):
         msg = []
         level = self.WARNING
@@ -95,12 +99,13 @@ class GetWMSLayerDetail(Task):
         if not self.result.get("enabled") or not self.storedetails.get("enabled"):
             msg.append("The layer is disabled.")
 
-        if not self.result["gwc"]["enabled"]:
-            msg.append("The GWC is disabled.")
+        if "gwc" in self.result:
+            if not self.result["gwc"].get("enabled"):
+                msg.append("The GWC is disabled.")
 
-        if self.result["gwc"].get("expireCache",0) < 0:
-            msg.append("The GWC server cache is disabled.")
-            level = self.ERROR
+            if self.result["gwc"].get("expireCache",0) < 0:
+                msg.append("The GWC server cache is disabled.")
+                level = self.ERROR
 
         if self.result.get("latLonBoundingBox") and self.result["latLonBoundingBox"]["crs"].upper() not in ("EPSG:4326","EPSG:4283"):
             msg.append("The CRS({}) of latLonBoundingBox is not EPSG:4326 or EPSG:4283\r\n{}".format(self.result["latLonBoundingBox"]["crs"],self.result.get("originalLatLonBoundingBox")))

@@ -2,24 +2,6 @@ import re
 import os
 import logging.config
 
-def init_logging():
-    from . import settings
-    logging_config_file = None
-    if settings.DEBUG:
-        logging_config_file = os.path.join(settings.BASE_DIR,"logging.debug.conf")
-        if not os.path.exists(logging_config_file):
-            logging_config_file = None
-
-    if not logging_config_file:
-        logging_config_file = os.path.join(settings.BASE_DIR,"logging.conf")
-        if not os.path.exists(logging_config_file):
-            logging_config_file = None
-
-    if not logging_config_file:
-        return
-
-    logging.config.fileConfig(logging_config_file)
-
 
 def has_samedata(datas1,datas2):
     """
