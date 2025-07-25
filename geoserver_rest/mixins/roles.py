@@ -102,6 +102,7 @@ class RolesMixin(object):
         """
         try:
             res = self.post(self.role_url(role,service=service),None)
+            logger.debug("Succeed to create the role({}).".format(role))
             return True
         except Exception as ex:
             if self.has_role(role):
@@ -117,6 +118,7 @@ class RolesMixin(object):
         """
         try:
             self.delete(self.role_url(role,service=service))
+            logger.debug("Succeed to delete the role({}).".format(role))
             return True
         except ResourceNotFound as ex:
             return False
@@ -154,6 +156,7 @@ class RolesMixin(object):
         Associate a role to a user
         """
         self.post("{}.json".format(self.user_role_url(role,user,service=service)),None,headers=self.accept_header("json"))
+        logger.debug("Succeed to associate the role({}) with the user({}).".format(role,user))
 
     def unassociate_role_with_user(self,role,user,service=None):
         """
@@ -161,6 +164,7 @@ class RolesMixin(object):
         Associate a role to a user
         """
         self.delete("{}.json".format(self.user_role_url(role,user,service=service)),headers=self.accept_header("json"))
+        logger.debug("Succeed to unassociate the role({}) with the user({}).".format(role,user))
 
     def associate_role_with_usergroup(self,role,group,service=None):
         """
@@ -168,6 +172,7 @@ class RolesMixin(object):
         Associate a role to a user group
         """
         self.post(self.usergroup_role_url(role,group,service=service),None)
+        logger.debug("Succeed to associate the role({}) with the usergroup({}).".format(role,group))
 
     def unassociate_role_with_usergroup(self,role,group,service=None):
         """
@@ -175,4 +180,5 @@ class RolesMixin(object):
         Associate a role to a user group
         """
         self.delete(self.usergroup_role_url(role,group,service=service))
+        logger.debug("Succeed to unassociate the role({}) with the usergroup({}).".format(role,group))
 

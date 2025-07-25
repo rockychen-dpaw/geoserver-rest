@@ -111,7 +111,7 @@ class UsergroupMixin(object):
         """
         try:
             res = self.post(self.usergroup_url(group,service=service),None,headers=collections.ChainMap(self.accept_header("json"),self.contenttype_header("json")))
-            logger.debug("Succeed to add the usergroup({}).".format(group))
+            logger.debug("Succeed to create the usergroup({}).".format(group))
             return True
         except requests.RequestException as ex:
             if self.has_usergroup(group):
@@ -126,6 +126,7 @@ class UsergroupMixin(object):
         #r = self.delete(self.usergroup_url(group),headers=collections.ChainMap(self.accept_header("json"),self.contenttype_header("json")))
         try:
             res = self.delete(self.usergroup_url(group,service=service)) 
+            logger.debug("Succeed to delete the usergroup({}).".format(group))
             return True
         except ResourceNotFound as ex:
             return False
@@ -145,7 +146,7 @@ class UsergroupMixin(object):
         try:
             return next(u for u in self.list_users(service=service) if u[0] == user)
         except StopIteration as ex:
-            return ObjectNotFound("The user({}) does not exist.".format(user))
+            raise ObjectNotFound("The user({}) does not exist.".format(user))
 
     def create_user(self,user,password,enable=True,service=None):
         return self.update_user(user,password=password,enable=enable,create=True,service=service)
@@ -174,7 +175,7 @@ class UsergroupMixin(object):
 
         if create:
             res = self.post(self.users_url(service=service),user_data,headers=collections.ChainMap(self.accept_header("json"),self.contenttype_header("xml")))
-            logger.debug("Succeed to add the user({}).".format(user))
+            logger.debug("Succeed to create the user({}).".format(user))
             return True
         else:
             res = self.post("{}.json".format(self.user_url(user,service=service)),user_data,headers=collections.ChainMap(self.accept_header("json"),self.contenttype_header("xml")))

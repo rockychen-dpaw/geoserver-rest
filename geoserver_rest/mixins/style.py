@@ -98,6 +98,9 @@ class StyleMixin(object):
     
         return [str(s["name"]) for s in (res.json().get("styles") or {}).get("style") or [] ]
     
+    def get_style(self,workspace,stylename):
+        return self.get(self.style_url(workspace,stylename),headers=self.accept_header("json")).json()["style"]
+    
     def has_style(self,workspace,stylename):
         return self.has(self.style_url(workspace,stylename),headers=self.accept_header("json"))
     
@@ -127,3 +130,18 @@ class StyleMixin(object):
         res = self.put(self.style_url(workspace,stylename),data=slddata, headers=headers)
         logger.debug("Succeed to update the style({}:{})".format(workspace,stylename))
     
+    def get_style_field(self,styledata,field):
+        """
+        field:
+            name:
+            namespace/workspace
+            format
+            version
+
+        """
+        if field in ("namespace","workspace"):
+            return styledata.get("workspace",{}).get("name")
+        elif field == "version":
+            return styledata.get("languageVersion",{}).get("version")
+        else:
+            return styledata.get(field)

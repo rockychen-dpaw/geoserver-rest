@@ -108,7 +108,7 @@ if __name__ == '__main__':
 
     geoservers = [(geoserver_urls[i][0],geoserver_urls[i][1],geoserver_users[i],geoserver_passwords[i]) for i in range(len(geoserver_urls))]
 
-    healthcheck = GeoserversHealthCheck(geoservers,settings.REQUEST_HEADERS,settings.HEALTHCHECK_DOP)
+    healthcheck = GeoserversHealthCheck(geoservers,settings.GET_REQUEST_HEADERS("GEOSERVER_REQUEST_HEADERS"),settings.HEALTHCHECK_DOP)
     healthcheck.start()
     processing_metadatas = healthcheck.wait_to_finish()
 

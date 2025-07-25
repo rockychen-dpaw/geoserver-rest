@@ -147,6 +147,7 @@ class DatastoreMixin(object):
                 self.upload_dataset_url(workspace,storename,filename,method="file",dataformat=dataformat,update=update,configure=configure),
                 f,
                 headers=self.contenttype_header(dataformat),timeout=600)
+        logger.debug("Succeed to upload the dataset({})".format(file))
 
         storedata = self.get_datastore(workspace,storename)
         parameters = {}

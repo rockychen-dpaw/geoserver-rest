@@ -41,9 +41,13 @@ WMTS_TIMEOUT = int(os.environ.get("WMTS_TIMEOUT",600))
 GETFEATURE_TIMEOUT = int(os.environ.get("GETFEATURE_TIMEOUT",600))
 GETCAPABILITY_TIMEOUT = int(os.environ.get("GETCAPABILITY_TIMEOUT",600))
 
-REQUEST_HEADERS = os.environ.get("REQUEST_HEADERS")
-if REQUEST_HEADERS:
-    REQUEST_HEADERS = dict([(header.strip().split("=",1) if "=" in header else [header,""]) for header in REQUEST_HEADERS.split(",") if header.strip()])
+def GET_REQUEST_HEADERS(name):
+    headers = os.environ.get(name)
+    if headers:
+        return dict([(header.strip().split("=",1) if "=" in header else [header,""]) for header in headers.split(",") if header.strip()])
+    else:
+        return None
+
 
 HEALTHCHECK_DOP = int(os.environ.get("HEALTHCHECK_DOP",2))
 

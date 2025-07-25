@@ -130,7 +130,7 @@ class GridsetUtil(object):
         zoom = 5
         isbiggerbefore = None
         while(True):
-            x,y= self.get_title(bbox[0],bbox[1],zoom)
+            x,y= self.get_tile(bbox[0],bbox[1],zoom)
             tilebbox = self.tile_bbox(zoom,x,y)
             if tilebbox[0] <= bbox[0] and tilebbox[1] <= bbox[1] and tilebbox[2] >= bbox[2] and tilebbox[3] >= bbox[3]:
                 #tilebbox bigger than the bbox.zoom in
@@ -142,7 +142,7 @@ class GridsetUtil(object):
             else:
                 #tilebbox smaller than the bbox.zoom out
                 if isbiggerbefore == True:
-                    return (zoom - 1,*self.get_title(bbox[0],bbox[1],zoom - 1))
+                    return (zoom - 1,*self.get_tile(bbox[0],bbox[1],zoom - 1))
                 else:
                     isbiggerbefore = False
                     zoom -= 1
@@ -350,8 +350,6 @@ class GWCMixin(object):
             gutter,
             "true" if enabled else "false"
         )
-        logger.debug("wmts layer data:\n{}".format(layer_data))
-    
         res = self.put(self.gwclayer_url(workspace,layername,f="xml"), headers=self.contenttype_header("xml"), data=layer_data,error_handler=self._handle_gwcresponse_error)
         logger.debug("Succeed to update the gwc layer({}:{}). ".format(workspace,layername))
     
@@ -378,20 +376,19 @@ class GWCMixin(object):
         """
         if zoom is None or row is None or column is None:
             try:
-                layerdata = self.geoserver.get_featuretype(workspace,layername)
-                bbox = self.geoserver.get_featuretype_field("latLonBounding")
+                layerdata = self.get_featuretype(workspace,layername)
+                bbox = self.get_featuretype_field(layerdata,"latLonBoundingBox")
                 bbox = (bbox["minx"],bbox["miny"],bbox["maxx"],bbox["maxy"])
             except ResourceNotFound as ex:
                 try:
-                    layerdata = self.geoserver.get_wmslayer(workspace,layername)
-                    bbox = self.geoserver.get_wmslayer_field("latLonBounding")
+                    layerdata = self.get_wmslayer(workspace,layername)
+                    bbox = self.get_wmslayer_field(layerdata,"latLonBoundingBox")
                     bbox = (bbox["minx"],bbox["miny"],bbox["maxx"],bbox["maxy"])
                 except ResourceNotFound as ex:
-                    layerdata = self.geoserver.get_layergroup(workspace,layername)
-                    bbox = self.geoserver.get_layergroup_field("bounds")
+                    layerdata = self.get_layergroup(workspace,layername)
+                    bbox = self.get_layergroup_field(layerdata,"bounds")
                     bbox = (bbox["minx"],bbox["miny"],bbox["maxx"],bbox["maxy"])
-
-            zoom,row,column = GridsetUtil.get_instance(self.get_gridset(gridset)["srs"]).get_bbox_tile(bbox)
+            zoom,column,row = GridsetUtil.get_instance(self.get_gridset(gridset)["srs"]).get_bbox_tile(bbox)
 
         url = self.tile_url(workspace,layername,zoom,row,column,gridset=gridset,format=format,style=style,version=version)
         logger.debug("Tile url={}".format(url))

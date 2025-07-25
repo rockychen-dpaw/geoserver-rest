@@ -17,7 +17,7 @@ class WMSStoreTest(BaseTest):
         try:
             storename = "teststore4unitest"
             parameters = {
-                "capabilitiesURL": os.environ.get("WMSSERVER_CAPABILITIESURL"),
+                "capabilitiesURL": "{}/ows?VERSION=1.1.1&REQUEST=GetCapabilities&SERVICE=WMS".format(os.environ.get("WMSSERVER_URL")),
                 "user": os.environ.get("WMSSERVER_USER",None),
                 "password": os.environ.get("WMSSERVER_PASSWORD",None),
                 "maxConnections": 10,

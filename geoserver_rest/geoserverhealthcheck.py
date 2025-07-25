@@ -398,7 +398,7 @@ if __name__ == '__main__':
     if not geoserver_name:
         geoserver_name = utils.get_domain(geoserver_url)
 
-    healthcheck = GeoserverHealthCheck(geoserver_name,geoserver_url,geoserver_user,geoserver_password,settings.REQUEST_HEADERS,settings.HEALTHCHECK_DOP)
+    healthcheck = GeoserverHealthCheck(geoserver_name,geoserver_url,geoserver_user,geoserver_password,settings.GET_REQUEST_HEADERS("GEOSERVER_REQUEST_HEADERS"),settings.HEALTHCHECK_DOP)
     healthcheck.start()
     healthcheck.wait_to_finish()
     healthcheck.write_report()

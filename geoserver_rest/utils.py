@@ -1,6 +1,6 @@
 import re
+import traceback
 import os
-import logging.config
 
 
 def has_samedata(datas1,datas2):
@@ -107,9 +107,13 @@ def get_bbox(coordinates):
     return None if any(c is None for c in bbox) else bbox
 
 def remove_file(f):
+    if not f:
+        return
+    
     try:
         os.remove(f)
     except Exception as ex:
+        traceback.print_exc()
         pass
                 
                 
