@@ -37,7 +37,8 @@ class GeoserverCompatibilityCheck(object):
     warningwriter = None
     _finished_tasks = None
     metadata = None
-    sufix = "4compatibilitycheck"
+    basesufix = "4compatibilitycheck"
+    sufix = "{}{}".format(int(datetime.utcnow().timestamp()) % 864000,basesufix)
     _layers = {}
     wmsserver = None
     
@@ -130,18 +131,16 @@ class GeoserverCompatibilityCheck(object):
         else:
             resources[keys[-1]] = [value]
 
-    resourcesufix = "compatibilitycheck"
-
     def reset_env(self):
         for wsname in self.geoserver.list_workspaces():
-            if not wsname.endswith(self.resourcesufix):
+            if not wsname.endswith(self.basesufix):
                 continue
             self.geoserver.delete_workspace(wsname,recurse=True)
             if self.geoserver.has_workspace(wsname):
                 raise Exception("Failed to delete workspace '{}'".format(wsname))
 
         for usergroup in self.list_usergroups():
-            if not usergroup.endswith(self.resourcesufix):
+            if not usergroup.endswith(self.basesufix):
                 continue
 
             self.geoserver.delete_usergroup(usergroup)
@@ -149,7 +148,7 @@ class GeoserverCompatibilityCheck(object):
                 raise Exception("Failed to delete user group '{}'".format(usergroup))
 
         for user,userenabled in self.list_users():
-            if not user.endwith(self.resourcesufix):
+            if not user.endwith(self.basesufix):
                 continue
 
             self.geoserver.delete_user(user)
@@ -424,7 +423,7 @@ class GeoserverCompatibilityCheck(object):
                     image_style = None
                     image_defaultstyle_updated = None
                     image_defaultstyle_restored = None
-                    ry:
+                    try:
                         image_defaultstyle = self.geoserver.get_map(wsname,layername,bbox,srs=srs,width=1024,height=1024,format="image/jpeg")
                         image_style = self.geoserver.get_map(wsname,layername,bbox,srs=srs,width=1024,height=1024,format="image/jpeg",style=style)
                         if filecmp.cmp(image_defaultstyle,image_style):
@@ -495,13 +494,13 @@ class GeoserverCompatibilityCheck(object):
                     continue
                 dataset = storeparameters
                 nativename = os.path.splitext(os.path.basename(dataset))[0]
-                key = (wsname,nativename)
+                layername = "{}{}".format(nativename,self.sufix)
+                key = (wsname,layername)
                 if key in self._layers:
-                    layername = "{}_{}".format(nativename,self._layers[key])
+                    layername = "{}_{}".format(layername,self._layers[key])
                     self._layers[key] += 1
                 else:
                     self._layers[key] = 1
-                    layername = nativename
                 parameters = {"nativeName":nativename,"title":nativename,"abstract":"for testing","keywords":["test"]}
                 try:
                     self.geoserver.publish_featuretype(wsname,storename,layername,parameters,create=True)
@@ -535,13 +534,13 @@ class GeoserverCompatibilityCheck(object):
         wsname = "featuretype{}".format(self.sufix)
         if os.environ.get("POSTGIS_TABLE"):
             nativename = os.environ["POSTGIS_TABLE"]
-            key = (wsname,nativename)
+            layername = "{}{}".format(nativename,self.sufix)
+            key = (wsname,layername)
             if key in self._layers:
-                layername = "{}_{}".format(nativename,self._layers[key])
+                layername = "{}_{}".format(layername,self._layers[key])
                 self._layers[key] += 1
             else:
                 self._layers[key] = 1
-                layername = nativename
             layers.append((
                 ("featuretype{}".format(self.sufix),"postgisds{}".format(self.sufix),layername),
                 {
@@ -554,13 +553,13 @@ class GeoserverCompatibilityCheck(object):
             ))
         if all(os.environ.get(key) is not None  for key in ("POSTGIS_GEOMETRY_COLUMN","POSTGIS_GEOMETRY_TYPE","POSTGIS_TABLE")):
             nativename = os.environ["POSTGIS_TABLE"]
-            key = (wsname,nativename)
+            layername = "{}{}".format(nativename,self.sufix)
+            key = (wsname,layername)
             if key in self._layers:
-                layername = "{}_{}".format(nativename,self._layers[key])
+                layername = "{}_{}".format(layername,self._layers[key])
                 self._layers[key] += 1
             else:
                 self._layers[key] = 1
-                layername = nativename
             layers.append((
                 ("featuretype{}".format(self.sufix),"postgisds{}".format(self.sufix),layername),
                 {
@@ -882,14 +881,13 @@ class GeoserverCompatibilityCheck(object):
             for wmsstorename,wmsstoredata in workspacedata.get("wmsstores",{}).items():
                 if wmsstorename == "__parameters__":
                     continue
-
-                key = (workspace,nativename)
+                layername = "{}{}".format(nativename,self.sufix)
+                key = (workspace,layername)
                 if key in self._layers:
-                    layername = "{}_{}".format(nativename,self._layers[key])
+                    layername = "{}_{}".format(layername,self._layers[key])
                     self._layers[key] += 1
                 else:
                     self._layers[key] = 1
-                    layername = nativename
                 try:
                     defaultstyle,alternativestyles = self.wmsserver.get_featuretype_styles(wsname,nativename)
                     defaultstyle.append(self.wmsserver.get_style(*defaultstyle))
@@ -1886,10 +1884,9 @@ class GeoserverCompatibilityCheck(object):
             self.reset_checking_env()
             self.delete_resources_in_wmsserver()
             
-            pass
 
 
-            print("""
+        print("""
 ===========================================================================
 Geoserver Compatibility Check: {}
 {}
@@ -1897,6 +1894,17 @@ Geoserver Compatibility Check: {}
 """.format("Passed" if self.compatible else "Failed","\n".join(
     "    {} : {}\n{}\n".format(feature,"Passed" if featuredata[0] else "Failed","\n".join("        {} : {}\n{}".format(operation,"Passed" if checkresult[0] else "Failed","\n".join("            {1}\t: {0}".format("Passed" if item[0] else "Failed",item[1]) for item in checkresult[1] )  ) for operation,checkresult in featuredata[1].items())) for feature,featuredata in self._checklist.items()
 )))
+        if not self.compatible:
+            print("\n\n")
+            print("""
+===========================================================================
+Failed Geoserver Compatibility Check Tasks: 
+{}
+===========================================================================
+""".format("\n".join(
+    "    {} : {}\n{}\n".format(feature,"Passed" if featuredata[0] else "Failed","\n".join("        {} : {}\n{}".format(operation,"Passed" if checkresult[0] else "Failed","\n".join("            {1}\t: {0}".format("Passed" if item[0] else "Failed",item[1]) for item in checkresult[1] if not item[0] )  ) for operation,checkresult in featuredata[1].items() if not checkresult[0] )) for feature,featuredata in self._checklist.items() if not featuredata[0]
+)))
+
 
             
 if __name__ == '__main__':
