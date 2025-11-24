@@ -223,7 +223,10 @@ class Task(object):
                         "errors while inspecting the location of an external graphic",
                         "unknown font",
                         "exceptioncode=\"tileoutofrange\"",
-                        "http error code 401"
+                        "http error code 401",
+                        "could not find layer",
+                        "could not locate a layer",
+                        "rendering process failed"
                 ]):
                     #this issues can't be fixed by retry
                     self.attempts = 0

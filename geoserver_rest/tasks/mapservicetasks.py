@@ -176,7 +176,6 @@ class TestWMSService(TestWMTSService):
 
     def set_with_gridset(self,geoserver):
         super().set_with_gridset(geoserver)
-        self.srs = self.gridsetdata["srs"]
         self.dimension = (self.gridsetdata["tileWidth"],self.gridsetdata["tileWidth"])
 
     def _exec(self,geoserver):
@@ -186,7 +185,7 @@ class TestWMSService(TestWMTSService):
             self.workspace,
             self._layername,
             self.bbox,
-            srs=self.srs,
+            srs=self.gridsetdata["srs"],
             style=self.style or "",
             width=self.dimension[0],
             height=self.dimension[1],
@@ -197,7 +196,7 @@ class TestWMSService(TestWMTSService):
             self.workspace,
             self._layername,
             self.bbox,
-            srs=self.srs,
+            srs=self.gridsetdata["srs"],
             style=self.style or "",
             width=self.dimension[0],
             height=self.dimension[1],
