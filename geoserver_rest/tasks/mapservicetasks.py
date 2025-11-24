@@ -88,6 +88,7 @@ image size : {}
         for i in range(len(layer_bbox)):
             layer_bbox[i] = float(layer_bbox[i])
 
+        """
         if self.gridsetdata["srs"].upper() in ("EPSG:4326","EPSG:4283"): 
             if layer_bbox[0] < settings.MAX_BBOX[0]:
                 layer_bbox[0] = settings.MAX_BBOX[0]
@@ -99,6 +100,7 @@ image size : {}
     
             if layer_bbox[3] > settings.MAX_BBOX[3]:
                 layer_bbox[3] = settings.MAX_BBOX[3]
+        """
 
         #get the gwc details
         maxZoom = len(self.gridsetdata["resolutions"]) - 1
@@ -168,6 +170,10 @@ class TestWMSService(TestWMTSService):
     srs = None
     dimension = None
 
+    def __init__(self,workspace,store,layername,srs,layer_bbox,style,post_actions_factory = None,zoom=-1,gridset=settings.GWC_GRIDSET,detailTask=None):
+        super(). __init__(workspace,store,layername,srs,layer_bbox,style,post_actions_factory = post_actions_factory,zoom=zoom,gridset=gridset)
+        self.detailTask = detailTask
+
     def set_with_gridset(self,geoserver):
         super().set_with_gridset(geoserver)
         self.srs = self.gridsetdata["srs"]
@@ -227,6 +233,27 @@ class TestWMSService4FeatureType(TestWMSService,TestWMTSService4FeatureType):
     keyarguments = ("workspace","datastore","featuretype","srs","style","dimension","format")
     category = "Test WMS Service for FeatureType"
 
+class TestWMTSService4Coverage(TestWMTSService):
+    """
+    Test the wms service of the coverage
+    """
+    arguments = ("workspace","coveragestore","coverage","gridset","zoom","row","column","style","format")
+    keyarguments = ("workspace","coveragestore","coverage","gridset","style","format")
+    category = "Test WMTS Service for Coverage"
+
+    @property
+    def coveragestore(self):
+        return self._store
+
+    @property 
+    def coverage(self):
+        return self._layername
+    
+class TestWMSService4Coverage(TestWMSService,TestWMTSService4Coverage):
+    arguments = ("workspace","coveragestore","coverage","srs","bbox","style","dimension","format")
+    keyarguments = ("workspace","coveragestore","coverage","srs","style","dimension","format")
+    category = "Test WMS Service for Coverage"
+
 class TestWMTSService4WMSLayer(TestWMTSService):
     category = "Test WMTS Service for WMSLayer"
     arguments = ("workspace","wmsstore","layername","gridset","zoom","row","column","style","format")
@@ -252,7 +279,7 @@ class TestWMTSService4Layergroup(TestWMTSService):
     keyarguments = ("workspace","layergroup","gridset","style")
 
     def __init__(self,workspace,layergroup,layer_bbox,style,post_actions_factory = None,zoom=-1,gridset=settings.GWC_GRIDSET):
-        super().__init__(workspace,None,layergroup,layer_bbox,style,post_actions_factory = post_actions_factory,zoom=zoom,gridset=gridset)
+        super().__init__(workspace,None,layergroup,None,layer_bbox,style,post_actions_factory = post_actions_factory,zoom=zoom,gridset=gridset)
 
     @property 
     def layergroup(self):
@@ -263,13 +290,17 @@ class TestWMSService4Layergroup(TestWMSService,TestWMTSService4Layergroup):
     keyarguments = ("workspace","layergroup","srs","style","dimension","format")
     category = "Test WMS Service for Layergroup"
 
+    def __init__(self,workspace,layergroup,layer_bbox,style,post_actions_factory = None,zoom=-1,gridset=settings.GWC_GRIDSET,detailTask=None):
+        super().__init__(workspace,None,layergroup,None,layer_bbox,style,post_actions_factory = post_actions_factory,zoom=zoom,gridset=gridset)
+        self.detailTask = detailTask
+
 def createtasks_TestWMSService4FeatureType(getFeatureTypeDetailTask,limit = 0):
     """
     a generator to return TestWMSService4FeatureType tasks
     """
     if not getFeatureTypeDetailTask.result:
         return
-    if not getFeatureTypeDetailTask.gwcenabled:
+    if not getFeatureTypeDetailTask.enabled:
         return 
     if not getFeatureTypeDetailTask.result["geometry"]:
         return
@@ -289,6 +320,7 @@ def createtasks_TestWMSService4FeatureType(getFeatureTypeDetailTask,limit = 0):
         srs,
         layer_bbox,
         None,
+        detailTask = getFeatureTypeDetailTask,
         zoom = settings.TEST_ZOOM,
         post_actions_factory=getFeatureTypeDetailTask.post_actions_factory)
 
@@ -314,8 +346,6 @@ def createtasks_TestWMTSService4FeatureType(getFeatureTypeDetailTask,limit = 0):
     if not getFeatureTypeDetailTask.gwcenabled:
         return 
     if not getFeatureTypeDetailTask.result["geometry"]:
-        return
-    if not getFeatureTypeDetailTask.result.get("gwc") or not getFeatureTypeDetailTask.result["gwc"].get("enabled",False):
         return
     #get the intersection between layer_box and settings.MAX_BBOX
     layer_bbox = getFeatureTypeDetailTask.result.get("latLonBoundingBox")
@@ -353,7 +383,7 @@ def createtasks_TestWMSService4Feature(getFeaturesTask,limit = 0):
     """
     a generator to return TestWMSService4FeatureType tasks
     """
-    if not getFeaturesTask.gwcenabled:
+    if not getFeaturesTask.enabled:
         return 
 
     if not getFeaturesTask.result or not getFeaturesTask.result.get("features"):
@@ -374,6 +404,7 @@ def createtasks_TestWMSService4Feature(getFeaturesTask,limit = 0):
         srs,
         layer_bbox,
         None,
+        detailTask = getFeaturesTask,
         zoom = -1,
         post_actions_factory=getFeaturesTask.post_actions_factory)
 
@@ -432,7 +463,7 @@ def createtasks_TestWMSService4WMSLayer(getWMSLayerDetailTask,limit = 0):
     """
     if not getWMSLayerDetailTask.result:
         return
-    if not getWMSLayerDetailTask.gwcenabled:
+    if not getWMSLayerDetailTask.enabled:
         return
 
     #get the intersection between layer_box and settings.MAX_BBOX
@@ -450,8 +481,36 @@ def createtasks_TestWMSService4WMSLayer(getWMSLayerDetailTask,limit = 0):
         srs,
         layer_bbox,
         None,
+        detailTask = getWMSLayerDetailTask,
         zoom = settings.TEST_ZOOM,
         post_actions_factory=getWMSLayerDetailTask.post_actions_factory)
+
+def createtasks_TestWMSService4Coverage(getCoverageDetailTask,limit = 0):
+    """
+    a generator to return TestWMSService4Coverage tasks
+    """
+    if not getCoverageDetailTask.result:
+        return
+    if not getCoverageDetailTask.enabled:
+        return
+
+    #get the intersection between layer_box and settings.MAX_BBOX
+    layer_bbox = getCoverageDetailTask.result.get("latLonBoundingBox")
+    if not layer_bbox or any(layer_bbox.get(k) is None for k in ("minx","miny","maxx","maxy")):
+        return
+
+    layer_bbox = [layer_bbox[k] for k in ("minx","miny","maxx","maxy")]
+    srs = getCoverageDetailTask.result["latLonBoundingBox"]["crs"].upper()
+    yield TestWMSService4Coverage(
+        getCoverageDetailTask.workspace,
+        getCoverageDetailTask.coveragestore,
+        getCoverageDetailTask.coverage,
+        srs,
+        layer_bbox,
+        None,
+        detailTask = getCoverageDetailTask,
+        zoom = settings.TEST_ZOOM,
+        post_actions_factory=getCoverageDetailTask.post_actions_factory)
 
 def createtasks_TestWMTSService4WMSLayer(getWMSLayerDetailTask,limit = 0):
     """
@@ -462,8 +521,6 @@ def createtasks_TestWMTSService4WMSLayer(getWMSLayerDetailTask,limit = 0):
     if not getWMSLayerDetailTask.gwcenabled:
         return
 
-    if not getWMSLayerDetailTask.result.get("gwc") or not getWMSLayerDetailTask.result["gwc"].get("enabled",False):
-        return
     #get the intersection between layer_box and settings.MAX_BBOX
     layer_bbox = getWMSLayerDetailTask.result.get("latLonBoundingBox")
     if not layer_bbox or any(layer_bbox.get(k) is None for k in ("minx","miny","maxx","maxy")):
@@ -493,8 +550,47 @@ def createtasks_TestWMTSService4WMSLayer(getWMSLayerDetailTask,limit = 0):
             None,
             post_actions_factory=getWMSLayerDetailTask.post_actions_factory,
             gridset=gridset,
-            zoom=zoom
-        )
+            zoom=zoom)
+
+def createtasks_TestWMTSService4Coverage(getCoverageDetailTask,limit = 0):
+    """
+    a generator to return TestWMSService4FeatureType tasks
+    """
+    if not getCoverageDetailTask.result:
+        return
+    if not getCoverageDetailTask.gwcenabled:
+        return
+
+    #get the intersection between layer_box and settings.MAX_BBOX
+    layer_bbox = getCoverageDetailTask.result.get("latLonBoundingBox")
+    if not layer_bbox or any(layer_bbox.get(k) is None for k in ("minx","miny","maxx","maxy")):
+        return
+    
+    layer_bbox = [layer_bbox[k] for k in ("minx","miny","maxx","maxy")]
+    srs = getCoverageDetailTask.result["latLonBoundingBox"]["crs"].upper()
+
+    for gridset in settings.GWC_GRIDSETS:
+        gridsetdata = next((gridsetdata  for gridsetdata in getCoverageDetailTask.result["gwc"]["gridSubsets"] if gridsetdata["gridSetName"] == gridset),None)
+        if not gridsetdata:
+            continue
+        zoom = settings.TEST_ZOOM
+        zoomStart = gridsetdata.get("zoomStart",0)
+        zoomEnd = gridsetdata.get("zoomEnd",None)
+        if zoom < zoomStart:
+            zoom  = zoomStart
+        if zoomEnd is not None and zoom > zoomEnd:
+            zoom = zoomEnd
+
+        yield TestWMTSService4Coverage(
+            getCoverageDetailTask.workspace,
+            getCoverageDetailTask.coveragestore,
+            getCoverageDetailTask.coverage,
+            srs,
+            layer_bbox,
+            None,
+            post_actions_factory=getCoverageDetailTask.post_actions_factory,
+            gridset=gridset,
+            zoom=zoom)
 
 def createtasks_TestWMSService4Layergroup(getLayergroupDetailTask,limit = 0):
     """
@@ -502,7 +598,7 @@ def createtasks_TestWMSService4Layergroup(getLayergroupDetailTask,limit = 0):
     """
     if not getLayergroupDetailTask.result:
         return
-    if not getLayergroupDetailTask.gwcenabled:
+    if not getLayergroupDetailTask.enabled:
         return
 
     #get the intersection between layer_box and settings.MAX_BBOX
@@ -516,9 +612,9 @@ def createtasks_TestWMSService4Layergroup(getLayergroupDetailTask,limit = 0):
     yield TestWMSService4Layergroup(
         getLayergroupDetailTask.workspace,
         getLayergroupDetailTask.layergroup,
-        srs,
         layer_bbox,
         None,
+        detailTask = getLayergroupDetailTask,
         zoom = settings.TEST_ZOOM,
         post_actions_factory=getLayergroupDetailTask.post_actions_factory)
 
@@ -556,7 +652,6 @@ def createtasks_TestWMTSService4Layergroup(getLayergroupDetailTask,limit = 0):
         yield TestWMTSService4Layergroup(
             getLayergroupDetailTask.workspace,
             getLayergroupDetailTask.layergroup,
-            srs,
             layer_bbox,
             None,
             post_actions_factory=getLayergroupDetailTask.post_actions_factory,
@@ -564,6 +659,80 @@ def createtasks_TestWMTSService4Layergroup(getLayergroupDetailTask,limit = 0):
             zoom=zoom
         )
 
+def createtasks_TestWMTSServiceFromWMSService(testWMSService,limit = 0):
+    """
+    a generator to return TestWMSService4FeatureType tasks
+    """
+    if not testWMSService.detailTask.gwcenabled:
+        return
+
+    for gridset in settings.GWC_GRIDSETS:
+        gridsetdata = next((gridsetdata  for gridsetdata in testWMSService.detailTask.result["gwc"]["gridSubsets"] if gridsetdata["gridSetName"] == gridset),None)
+        if not gridsetdata:
+            continue
+        zoom = settings.TEST_ZOOM
+        zoomStart = gridsetdata.get("zoomStart",0)
+        zoomEnd = gridsetdata.get("zoomEnd",None)
+        if zoom < zoomStart:
+            zoom  = zoomStart
+        if zoomEnd is not None and zoom > zoomEnd:
+            zoom = zoomEnd
+
+        if isinstance(testWMSService,TestWMSService4FeatureType):
+            #only test wmts for default style
+            if not testWMSService.style:
+                return
+            yield TestWMTSService4FeatureType(
+                testWMSService.workspace,
+                testWMSService._store,
+                testWMSService._layername,
+                testWMSService.srs,
+                testWMSService.layer_bbox,
+                testWMSService.style,
+                post_actions_factory=testWMSService.post_actions_factory,
+                gridset=gridset,
+                zoom=zoom)
+        elif isinstance(testWMSService,TestWMSService4Coverage):
+            yield TestWMTSService4Coverage(
+                testWMSService.workspace,
+                testWMSService._store,
+                testWMSService._layername,
+                testWMSService.srs,
+                testWMSService.layer_bbox,
+                testWMSService.style,
+                post_actions_factory=testWMSService.post_actions_factory,
+                gridset=gridset,
+                zoom=zoom)
+        elif isinstance(testWMSService,TestWMSService4WMSLayer):
+            yield TestWMTSService4WMSLayer(
+                testWMSService.workspace,
+                testWMSService._store,
+                testWMSService._layername,
+                testWMSService.srs,
+                testWMSService.layer_bbox,
+                testWMSService.style,
+                post_actions_factory=testWMSService.post_actions_factory,
+                gridset=gridset,
+                zoom=zoom)
+        elif isinstance(testWMSService,TestWMSService4Layergroup):
+            yield TestWMTSService4Layergroup(
+                testWMSService.workspace,
+                testWMSService._layername,
+                testWMSService.layer_bbox,
+                testWMSService.style,
+                post_actions_factory=testWMSService.post_actions_factory,
+                gridset=gridset,
+                zoom=zoom)
+
+def createtasks_WMTSGetCapabilities(task,limit = 0):
+    """
+    a generator to return WMTSSGetCapabilitiesTask
+    """
+    if not task.is_succeed:
+        return
+    yield WMTSGetCapabilitiesTask(
+        post_actions_factory=task.post_actions_factory
+    )
 def createtasks_WMTSGetCapabilities(task,limit = 0):
     """
     a generator to return WMTSSGetCapabilitiesTask

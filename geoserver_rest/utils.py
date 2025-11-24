@@ -113,7 +113,6 @@ def remove_file(f):
     try:
         os.remove(f)
     except Exception as ex:
-        traceback.print_exc()
         pass
                 
                 

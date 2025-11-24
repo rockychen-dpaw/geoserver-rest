@@ -6,7 +6,7 @@ import shutil
 import jinja2
 import traceback
 
-from .taskrunner import TaskRunner
+from .taskrunner import GeoserverTaskRunner
 from .geoserver import Geoserver
 from .tasks import *
 from .csv import CSVWriter
@@ -15,6 +15,7 @@ from . import timezone
 from . import loggingconfig
 from . import utils
 from .mail import EmailMessage
+from .geoserverdataconsistencycheck import GeoserverDataConsistencyCheckTask
 
 logger = logging.getLogger("geoserver_rest.geoserverhealthcheck")
 
@@ -31,11 +32,18 @@ class GeoserverHealthCheck(object):
     _finished_tasks = None
     metadata = None
     
-    def __init__(self,geoserver_name,geoserver_url,geoserver_user,geoserver_password,requestheaders=None,dop=1,keep_tasks=False):
+    def __init__(self,geoserver_name,geoserver_url,geoserver_user,geoserver_password,ssl_verify,data_dir,host,port,dbname,user,passwd,sslmode,requestheaders=None,dop=1,keep_tasks=False):
         self.keep_tasks = keep_tasks
         self.geoserver_name = geoserver_name
-        self.geoserver = Geoserver(geoserver_url,geoserver_user,geoserver_password,headers=requestheaders)
-        self.taskrunner = TaskRunner(geoserver_name,self.geoserver,dop=dop,keep_tasks=keep_tasks)
+        self.geoserver = Geoserver(geoserver_url,geoserver_user,geoserver_password,headers=requestheaders,ssl_verify=ssl_verify)
+        self.data_dir = data_dir
+        self.host = host
+        self.port = port
+        self.dbname = dbname
+        self.user = user
+        self.passwd = passwd
+        self.sslmode = sslmode
+        self.taskrunner = GeoserverTaskRunner(geoserver_name,self.geoserver,dop=dop,keep_tasks=keep_tasks)
         self._reportwriteaction = None
         self._warningwriteaction = None
         self.warnings = 0
@@ -122,20 +130,29 @@ class GeoserverHealthCheck(object):
         return _func
 
     def post_actions_factory(self,taskcls):
-        if taskcls == CheckGeoserverAlive:
+
+        if taskcls == GeoserverDataConsistencyCheckTask:
             return [
-                self.create_tasks_from_previoustask_factory(createtasks_WFSGetCapabilities,0),
-                self.create_tasks_from_previoustask_factory(createtasks_WMSGetCapabilities,0),
-                self.create_tasks_from_previoustask_factory(createtasks_WMTSGetCapabilities,0),
+                self.create_tasks_from_previoustask_factory(createtasks_CheckGeoserverAlive,0),
+                self._reportwriteaction,
+                self._warningwriteaction
+            ]
+        elif taskcls == CheckGeoserverAlive:
+            return [
+                #self.create_tasks_from_previoustask_factory(createtasks_WFSGetCapabilities,0),
+                #self.create_tasks_from_previoustask_factory(createtasks_WMSGetCapabilities,0),
+                #self.create_tasks_from_previoustask_factory(createtasks_WMTSGetCapabilities,0),
+                self.create_tasks_from_previoustask_factory(createtasks_CoverageGetCapabilities,0),
                 self.create_tasks_from_previoustask_factory(createtasks_ListWorkspaces,0),
                 self._reportwriteaction,
                 self._warningwriteaction
             ]
         elif taskcls == ListWorkspaces:
             return [
-                self.create_tasks_from_previoustask_factory(createtasks_ListDatastores,0),
-                self.create_tasks_from_previoustask_factory(createtasks_ListWMSstores,0),
-                self.create_tasks_from_previoustask_factory(createtasks_ListLayergroups,0),
+                #self.create_tasks_from_previoustask_factory(createtasks_ListDatastores,0),
+                self.create_tasks_from_previoustask_factory(createtasks_ListCoverageStores,0),
+                #self.create_tasks_from_previoustask_factory(createtasks_ListWMSstores,0),
+                #self.create_tasks_from_previoustask_factory(createtasks_ListLayergroups,0),
                 self._reportwriteaction,
                 self._warningwriteaction
             ]
@@ -145,15 +162,33 @@ class GeoserverHealthCheck(object):
                 self._reportwriteaction,
                 self._warningwriteaction
             ]
+        elif taskcls == ListCoverageStores:
+            return [
+                self.create_tasks_from_previoustask_factory(createtasks_GetCoverageStore),
+                self._reportwriteaction,
+                self._warningwriteaction
+            ]
         elif taskcls == GetDatastore:
             return [
                 self.create_tasks_from_previoustask_factory(createtasks_ListFeatureTypes),
                 self._reportwriteaction,
                 self._warningwriteaction
             ]
+        elif taskcls == GetCoverageStore:
+            return [
+                self.create_tasks_from_previoustask_factory(createtasks_ListCoverages),
+                self._reportwriteaction,
+                self._warningwriteaction
+            ]
         elif taskcls == ListFeatureTypes:
             return [
                 self.create_tasks_from_previoustask_factory(createtasks_GetFeatureTypeDetail),
+                self._reportwriteaction,
+                self._warningwriteaction
+            ]
+        elif taskcls == ListCoverages:
+            return [
+                self.create_tasks_from_previoustask_factory(createtasks_GetCoverageDetail),
                 self._reportwriteaction,
                 self._warningwriteaction
             ]
@@ -193,14 +228,21 @@ class GeoserverHealthCheck(object):
         elif taskcls == GetWMSLayerDetail:
             return [
                 self.create_tasks_from_previoustask_factory(createtasks_TestWMSService4WMSLayer),
-                self.create_tasks_from_previoustask_factory(createtasks_TestWMTSService4WMSLayer),
+                #self.create_tasks_from_previoustask_factory(createtasks_TestWMTSService4WMSLayer),
+                self._reportwriteaction,
+                self._warningwriteaction,
+            ]
+        elif taskcls == GetCoverageDetail:
+            return [
+                self.create_tasks_from_previoustask_factory(createtasks_TestWMSService4Coverage),
+                #self.create_tasks_from_previoustask_factory(createtasks_TestWMTSService4WMSLayer),
                 self._reportwriteaction,
                 self._warningwriteaction,
             ]
         elif taskcls == GetLayergroupDetail:
             return [
                 self.create_tasks_from_previoustask_factory(createtasks_TestWMSService4Layergroup),
-                self.create_tasks_from_previoustask_factory(createtasks_TestWMTSService4Layergroup),
+                #self.create_tasks_from_previoustask_factory(createtasks_TestWMTSService4Layergroup),
                 self._reportwriteaction,
                 self._warningwriteaction,
             ]
@@ -212,37 +254,7 @@ class GeoserverHealthCheck(object):
         elif taskcls == GetFeatures:
             return [
                 self.create_tasks_from_previoustask_factory(createtasks_TestWMSService4Feature),
-                self.create_tasks_from_previoustask_factory(createtasks_TestWMTSService4Feature),
-                self._reportwriteaction,
-                self._warningwriteaction,
-            ]
-        elif taskcls == TestWMSService4FeatureType:
-            return [
-                self._reportwriteaction,
-                self._warningwriteaction,
-            ]
-        elif taskcls == TestWMTSService4FeatureType:
-            return [
-                self._reportwriteaction,
-                self._warningwriteaction,
-            ]
-        elif taskcls == TestWMSService4WMSLayer:
-            return [
-                self._reportwriteaction,
-                self._warningwriteaction,
-            ]
-        elif taskcls == TestWMTSService4WMSLayer:
-            return [
-                self._reportwriteaction,
-                self._warningwriteaction,
-            ]
-        elif taskcls == TestWMSService4Layergroup:
-            return [
-                self._reportwriteaction,
-                self._warningwriteaction,
-            ]
-        elif taskcls == TestWMTSService4Layergroup:
-            return [
+                #self.create_tasks_from_previoustask_factory(createtasks_TestWMTSService4Feature),
                 self._reportwriteaction,
                 self._warningwriteaction,
             ]
@@ -261,6 +273,17 @@ class GeoserverHealthCheck(object):
                 self._reportwriteaction,
                 self._warningwriteaction,
             ]
+        elif taskcls in [TestWMSService4FeatureType,TestWMSService4WMSLayer,TestWMSService4Layergroup,TestWMSService4Coverage]:
+            return [
+                self.create_tasks_from_previoustask_factory(createtasks_TestWMTSServiceFromWMSService),
+                self._reportwriteaction,
+                self._warningwriteaction,
+            ]
+        elif taskcls in [TestWMTSService4FeatureType,TestWMTSService4WMSLayer,TestWMTSService4Layergroup,TestWMTSService4Coverage]:
+            return [
+                self._reportwriteaction,
+                self._warningwriteaction,
+            ]
 
 
         return None
@@ -269,12 +292,22 @@ class GeoserverHealthCheck(object):
     def start(self):
         self.taskrunner.start()
         self.starttime = timezone.localtime()
-        basetask = CheckGeoserverAlive()
-        #basetask = GetWMSLayerDetail("kaartdijin-boodja-private","WA_firescan","linescanner_SWIR_3-6_2",self.geoserver.get_wmsstore("kaartdijin-boodja-private","WA_firescan"))
-        self._reportwriteaction = self.write_report_action_factory(basetask)
-        self._warningwriteaction = self.write_warning_action_factory(basetask)
+        if self.data_dir:
 
-        task = CheckGeoserverAlive(post_actions_factory = self.post_actions_factory)
+            basetask = GeoserverDataConsistencyCheckTask(data_dir=self.data_dir,host=self.host,port=self.port,dbname=self.dbname,user=self.user,passwd=self.passwd,sslmode=self.sslmode)
+            #basetask = GetWMSLayerDetail("kaartdijin-boodja-private","WA_firescan","linescanner_SWIR_3-6_2",self.geoserver.get_wmsstore("kaartdijin-boodja-private","WA_firescan"))
+            self._reportwriteaction = self.write_report_action_factory(basetask)
+            self._warningwriteaction = self.write_warning_action_factory(basetask)
+
+            task = GeoserverDataConsistencyCheckTask(data_dir=self.data_dir,host=self.host,port=self.port,dbname=self.dbname,user=self.user,passwd=self.passwd,sslmode=self.sslmode,post_actions_factory = self.post_actions_factory)
+        else:
+            basetask = CheckGeoserverAlive()
+            #basetask = GetWMSLayerDetail("kaartdijin-boodja-private","WA_firescan","linescanner_SWIR_3-6_2",self.geoserver.get_wmsstore("kaartdijin-boodja-private","WA_firescan"))
+            self._reportwriteaction = self.write_report_action_factory(basetask)
+            self._warningwriteaction = self.write_warning_action_factory(basetask)
+
+            task = CheckGeoserverAlive(post_actions_factory = self.post_actions_factory)
+
         #task = GetFeatureTypeDetail("kaartdijin-boodja-private","CPT_DFES_BUSHFIRE_PRONE_AREAS","CPT_DFES_BUSHFIRE_PRONE_AREAS",self.geoserver.get_datastore("kaartdijin-boodja-private","CPT_DFES_BUSHFIRE_PRONE_AREAS"),post_actions_factory = self.post_actions_factory)
         self.taskrunner.add_task(task)
 
@@ -298,6 +331,7 @@ class GeoserverHealthCheck(object):
             if close_report_writer:
                 self.close_report_writers()
         except Exception as ex:
+            logger.error(traceback.format_exc())
             exceptions.append(ex)
 
         if self.taskrunner.finished_tasks:
@@ -395,10 +429,20 @@ if __name__ == '__main__':
     geoserver_url = os.environ["GEOSERVER_URL"]
     geoserver_user = os.environ["GEOSERVER_USER"]
     geoserver_password = os.environ["GEOSERVER_PASSWORD"]
+    geoserver_ssl_verify = os.environ.get("GEOSERVER_SSL_VERIFY","true").lower() == "true"
+   
+    geoserver_data_dir = os.environ.get("GEOSERVER_DATA_DIR")
+    geoserver_catalog_host = os.environ.get("GEOSERVER_CATALOG_HOST") or "localhost"
+    geoserver_catalog_port = int(os.environ.get("GEOSERVER_CATALOG_PORT",5432)) or 5432
+    geoserver_catalog_dbname = os.environ.get("GEOSERVER_CATALOG_DB")
+    geoserver_catalog_user = os.environ.get("GEOSERVER_CATALOG_USER")
+    geoserver_catalog_passwd = os.environ.get("GEOSERVER_CATALOG_PASSWORD")
+    geoserver_catalog_sslmode = os.environ.get("GEOSERVER_CATALOG_SSLMODE") or "prefer"
+
     if not geoserver_name:
         geoserver_name = utils.get_domain(geoserver_url)
 
-    healthcheck = GeoserverHealthCheck(geoserver_name,geoserver_url,geoserver_user,geoserver_password,settings.GET_REQUEST_HEADERS("GEOSERVER_REQUEST_HEADERS"),settings.HEALTHCHECK_DOP)
+    healthcheck = GeoserverHealthCheck(geoserver_name,geoserver_url,geoserver_user,geoserver_password,geoserver_ssl_verify,geoserver_data_dir,geoserver_catalog_host,geoserver_catalog_port,geoserver_catalog_dbname,geoserver_catalog_user,geoserver_catalog_passwd,geoserver_catalog_sslmode,settings.GET_REQUEST_HEADERS("GEOSERVER_REQUEST_HEADERS"),settings.HEALTHCHECK_DOP)
     healthcheck.start()
     healthcheck.wait_to_finish()
     healthcheck.write_report()

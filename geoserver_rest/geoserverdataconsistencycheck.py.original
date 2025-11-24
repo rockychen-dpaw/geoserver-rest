@@ -1,0 +1,863 @@
+import os
+import re
+
+styleid_re = re.compile("\\<id\\>(?P<id>StyleInfo[^\\<\\>]+)\\</id\\>",re.I)
+workspaceid_re = re.compile("\\<id\\>(?P<id>WorkspaceInfo[^\\<\\>]+)\\</id\\>",re.I)
+namespaceid_re = re.compile("\\<id\\>(?P<id>NamespaceInfo[^\\<\\>]+)\\</id\\>",re.I)
+datastoreid_re = re.compile("\\<id\\>(?P<id>DataStoreInfo[^\\<\\>]+)\\</id\\>",re.I)
+wmsstoreid_re = re.compile("\\<id\\>(?P<id>WMSStoreInfo[^\\<\\>]+)\\</id\\>",re.I)
+coveragestoreid_re = re.compile("\\<id\\>(?P<id>CoverageStoreInfo[^\\<\\>]+)\\</id\\>",re.I)
+featuretypeid_re = re.compile("\\<id\\>(?P<id>FeatureTypeInfo[^\\<\\>]+)\\</id\\>",re.I)
+layerid_re = re.compile("\\<id\\>(?P<id>LayerInfo[^\\<\\>]+)\\</id\\>",re.I)
+wmslayerid_re = re.compile("\\<id\\>(?P<id>WMSLayerInfo[^\\<\\>]+)\\</id\\>",re.I)
+coveragelayerid_re = re.compile("\\<id\\>(?P<id>CoverageInfo[^\\<\\>]+)\\</id\\>",re.I)
+layergroupid_re = re.compile("\\<id\\>(?P<id>LayerGroupInfo[^\\<\\>]+)\\</id\\>",re.I)
+gwclayerid_re = re.compile("\\<id\\>(?P<id>[^\\<\\>]+)\\</id\\>",re.I)
+gwclayername_re = re.compile("\\<name\\>(?P<name>[^\\<\\>]+)\\</name\\>")
+
+class GeoserverDataConsistencyCheck(object):
+    styleids = {}
+    styles = {}
+
+    workspaceids =  {}
+    namespaceids = {}
+
+    datastoreids = {}
+
+    wmsstoreids = {}
+
+    coveragestoreids = {}
+
+    layerids = {}
+    layers = {}
+
+    featuretypeids = {}
+    featuretypes = {}
+
+    wmslayerids = {}
+    wmslayers = {}
+
+    coveragelayerids = {}
+    coveragelayers = {}
+
+    layergroupids = {}
+    layergroups = {}
+
+    gwclayers = {}
+
+    errors = []
+    warnings = []
+
+    def __init__(self,geoserver_data_dir):
+        self.geoserver_data_dir = geoserver_data_dir
+
+    def _load_workspaces(self):
+        workspacespath = os.path.join(self.geoserver_data_dir,"workspaces")
+        if not os.path.exists(workspacespath):
+            return
+        
+        for workspace in os.listdir(workspacespath):
+            if workspace == "styles":
+                continue
+            elif not os.path.isdir(os.path.join(workspacespath,workspace)):
+                #not a workspace
+                continue
+            else:
+                workspacepath = os.path.join(workspacespath,workspace)
+                if not os.path.exists(os.path.join(workspacepath,"namespace.xml")) or not os.path.exists(os.path.join(workspacepath,"workspace.xml")):
+                    #workspace is not enabled
+                    print("The workspace '{}' is ignored because of missing namespace.xml or workspace.xml'".format(workspace))
+                    self.warnings.append((workspace,"The workspace '{}' is ignored because of missing namespace.xml or workspace.xml".format(workspace)))
+                    continue
+
+                workspacefile = os.path.join(workspacepath,"workspace.xml")
+                with open(workspacefile) as f:
+                    data = f.read()
+                m = workspaceid_re.search(data)
+                if not m:
+                    self.errors.append((workspace,"Invalid workspace file '{}', can't find the workspace id".format(workspacefile)))
+                    continue
+
+                workspaceid = m.group("id")
+                self.workspaceids[workspaceid] = (workspace,workspacefile)
+
+                namespacefile = os.path.join(workspacepath,"namespace.xml")
+                with open(namespacefile) as f:
+                    data = f.read()
+                m = namespaceid_re.search(data)
+                if not m:
+                    self.errors.append((workspace,"Invalid namespace file '{}', can't find the workspace id".format(namespacefile)))
+                    continue
+
+                namespaceid = m.group("id")
+                self.namespaceids[namespaceid] = (workspace,namespacefile)
+
+        print("Load {} workspaces".format(len(self.workspaceids)))
+        print("Load {} namespaces".format(len(self.namespaceids)))
+
+    def _load_datastores(self):
+        workspacespath = os.path.join(self.geoserver_data_dir,"workspaces")
+        if not os.path.exists(workspacespath):
+            return
+ 
+        for workspace in os.listdir(workspacespath):
+            if workspace == "styles":
+                continue
+            elif not os.path.isdir(os.path.join(workspacespath,workspace)):
+                #not a workspace
+                continue
+            else:
+                workspacepath = os.path.join(workspacespath,workspace)
+                if not os.path.exists(os.path.join(workspacepath,"namespace.xml")) or not os.path.exists(os.path.join(workspacepath,"workspace.xml")):
+                    #workspace is not enabled
+                    continue
+                count = 0
+                for store in os.listdir(os.path.join(workspacepath)):
+                    if not os.path.isdir(os.path.join(workspacepath,store)):
+                        continue
+                    storefile = os.path.join(workspacepath,store,"datastore.xml")
+                    if not os.path.exists(storefile):
+                        #has no datastore
+                        continue
+
+                    with open(storefile) as f:
+                        data = f.read()
+                    m = datastoreid_re.search(data)
+                    if not m:
+                        self.errors.append(("{}:{}".format(workspace,store),"Invalid datastore file '{}', can't find the datastore id".format(storefile)))
+                        continue
+                    storeid = m.group("id")
+                    self.datastoreids[storeid] = (workspace,store,storefile)
+                    count += 1
+
+                    m = workspaceid_re.search(data)
+                    if not m:
+                        self.errors.append(("{}:{}".format(workspace,store),"Invalid datastore file '{}', can't find the workspace id to which the datastore belongs .".format(storefile)))
+                        continue
+                    workspaceid = m.group("id")
+                    if workspaceid not in self.workspaceids:
+                        self.errors.append(("{}:{}".format(workspace,store),"Invalid datastore file '{}', the workspace id '{}' doesn't exist.".format(storefile,workspaceid)))
+                        continue
+                if count > 0:
+                    print("Load {1} datastores in workspace '{0}'".format(workspace,count))
+
+        print("Load {} datastores".format(len(self.datastoreids)))
+
+    def _load_wmsstores(self):
+        workspacespath = os.path.join(self.geoserver_data_dir,"workspaces")
+        if not os.path.exists(workspacespath):
+            return
+
+        for workspace in os.listdir(workspacespath):
+            if workspace == "styles":
+                continue
+            elif not os.path.isdir(os.path.join(workspacespath,workspace)):
+                #not a workspace
+                continue
+            else:
+                workspacepath = os.path.join(workspacespath,workspace)
+                if not os.path.exists(os.path.join(workspacepath,"namespace.xml")) or not os.path.exists(os.path.join(workspacepath,"workspace.xml")):
+                    #workspace is not enabled
+                    continue
+                count = 0
+                for store in os.listdir(os.path.join(workspacepath)):
+                    if not os.path.isdir(os.path.join(workspacepath,store)):
+                        continue
+                    storefile = os.path.join(workspacepath,store,"wmsstore.xml")
+                    if not os.path.exists(storefile):
+                        #has no wmsstore
+                        continue
+
+                    with open(storefile) as f:
+                        data = f.read()
+                    m = wmsstoreid_re.search(data)
+                    if not m:
+                        self.errors.append(("{}:{}".format(workspace,store),"Invalid wmsstore file '{}', can't find the wmsstore id".format(storefile)))
+                        continue
+
+                    storeid = m.group("id")
+                    self.wmsstoreids[storeid] = (workspace,store,storefile)
+                    count += 1
+
+                    m = workspaceid_re.search(data)
+                    if not m:
+                        self.errors.append(("{}:{}".format(workspace,store),"Invalid wmsstore file '{}', can't find the workspace id to which the wmsstore belongs.".format(storefile)))
+                        continue
+
+                    workspaceid = m.group("id")
+                    if workspaceid not in self.workspaceids:
+                        self.errors.append(("{}:{}".format(workspace,store),"Invalid wmsstore file '{}', the workspace id '{}' doesn't exist.".format(storefile,workspaceid)))
+                        continue
+                if count > 0:
+                    print("Load {1} wmsstores in workspace '{0}'".format(workspace,len(self.wmsstoreids)))
+
+        print("Load {} wmsstores".format(len(self.wmsstoreids)))
+
+    def _load_coveragestores(self):
+        workspacespath = os.path.join(self.geoserver_data_dir,"workspaces")
+        if not os.path.exists(workspacespath):
+            return
+
+        for workspace in os.listdir(workspacespath):
+            if workspace == "styles":
+                continue
+            elif not os.path.isdir(os.path.join(workspacespath,workspace)):
+                #not a workspace
+                continue
+            else:
+                workspacepath = os.path.join(workspacespath,workspace)
+                if not os.path.exists(os.path.join(workspacepath,"namespace.xml")) or not os.path.exists(os.path.join(workspacepath,"workspace.xml")):
+                    #workspace is not enabled
+                    continue
+                count = 0
+                for store in os.listdir(os.path.join(workspacepath)):
+                    if not os.path.isdir(os.path.join(workspacepath,store)):
+                        continue
+                    storefile = os.path.join(workspacepath,store,"coveragestore.xml")
+                    if not os.path.exists(storefile):
+                        #has no coveragestore
+                        continue
+
+                    with open(storefile) as f:
+                        data = f.read()
+                    m = coveragestoreid_re.search(data)
+                    if not m:
+                        self.errors.append(("{}:{}".format(workspace,store),"Invalid coveragestore file '{}', can't find the coveragestore id".format(storefile)))
+                        continue
+
+                    storeid = m.group("id")
+                    self.coveragestoreids[storeid] = (workspace,store,storefile)
+                    count += 1
+
+                    m = workspaceid_re.search(data)
+                    if not m:
+                        self.errors.append(("{}:{}".format(workspace,store),"Invalid coveragestore file '{}', can't find the workspace id to which the coveragestore belongs.".format(storefile)))
+                        continue
+
+                    workspaceid = m.group("id")
+                    if workspaceid not in self.workspaceids:
+                        self.errors.append(("{}:{}".format(workspace,store),"Invalid coveragestore file '{}', the workspace id '{}' doesn't exist.".format(storefile,workspaceid)))
+                        continue
+                if count > 0:
+                    print("Load {1} coveragestores in workspace '{0}'".format(workspace,len(self.coveragestoreids)))
+
+        print("Load {} coveragestores".format(len(self.coveragestoreids)))
+
+
+    def _load_featuretypes(self):
+        workspacespath = os.path.join(self.geoserver_data_dir,"workspaces")
+        if not os.path.exists(workspacespath):
+            return
+
+        for workspace in os.listdir(workspacespath):
+            if workspace == "styles":
+                continue
+            elif not os.path.isdir(os.path.join(workspacespath,workspace)):
+                #not a workspace
+                continue
+            else:
+                workspacepath = os.path.join(workspacespath,workspace)
+                if not os.path.exists(os.path.join(workspacepath,"namespace.xml")) or not os.path.exists(os.path.join(workspacepath,"workspace.xml")):
+                    #workspace is not enabled
+                    print("The workspace '{}' is not enabled".format(workspace))
+                    self.warnings.append((workspace,"The workspace '{}' is not enabled".format(workspace)))
+                    continue
+
+                for store in os.listdir(os.path.join(workspacepath)):
+                    if not os.path.isdir(os.path.join(workspacepath,store)):
+                        continue
+                    if not os.path.exists(os.path.join(workspacepath,store,"datastore.xml")):
+                        #not a datastore
+                        continue
+
+                    storepath = os.path.join(workspacepath,store)
+                    for featuretype in os.listdir(storepath):
+                        if not os.path.isdir(os.path.join(storepath,featuretype)):
+                            continue
+
+                        featuretypefile = os.path.join(storepath,featuretype,"featuretype.xml")
+                        if not os.path.exists(featuretypefile):
+                            self.warnings.append("{}:{}:{}".format(workspace,store,featuretype),"Can't find the file '{3}', The featuretype({0}:{1}:{2}) is ignored".format(workspace,store,featuretype,featuretypefile))
+                            continue
+
+                        with open(featuretypefile) as f:
+                            data = f.read()
+                        m = featuretypeid_re.search(data)
+                        if not m:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,featuretype),"Invalid featuretype '{}:{}:{}', can't find the featuretype id in file '{}'".format(workspace,store,featuretype,featuretypefile)))
+                            continue
+                        featuretypeid = m.group("id")
+                        self.featuretypeids[featuretypeid] = (workspace,store,featuretype,featuretypefile)
+                        if workspace not in self.featuretypes:
+                            self.featuretypes[workspace] = {}
+                        if store not in self.featuretypes[workspace]:
+                            self.featuretypes[workspace][store] = {}
+
+                        self.featuretypes[workspace][store][featuretype] = (featuretypeid,featuretypefile)
+
+                        m = namespaceid_re.search(data)
+                        if not m:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,featuretype),"Invalid featuretype '{}:{}:{}', can't find the namespace id in file '{}'".format(workspace,store,featuretype,featuretypefile)))
+                            continue
+
+                        namespaceid = m.group("id")
+                        if namespaceid not in self.namespaceids:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,featuretype),"Invalid featuretype '{0}:{1}:{2}', the namespace id({4}) in file '{3}' doesn't exist'".format(workspace,store,featuretype,featuretypefile,namespaceid)))
+                            continue
+
+                        m = datastoreid_re.search(data)
+                        if not m:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,featuretype),"Invalid featuretype '{}:{}:{}', can't find the datastore id in file '{}'".format(workspace,store,featuretype,featuretypefile)))
+                            continue
+
+                        datastoreid = m.group("id")
+                        if datastoreid not in self.datastoreids:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,featuretype),"Invalid featuretype '{0}:{1}:{2}', the datastore id({4}) in file '{3}' doesn't exist'".format(workspace,store,featuretype,featuretypefile,datastoreid)))
+                            continue
+
+                        layerfile = os.path.join(storepath,featuretype,"layer.xml")
+                        if not os.path.exists(layerfile):
+                            self.warnings.append("{}:{}:{}".format(workspace,store,featuretype),"Can't find the file '{3}', The featuretype({0}:{1}:{2}) is disabled".format(workspace,store,featuretype,layerfile))
+                            continue
+
+                        with open(layerfile) as f:
+                            data = f.read()
+                        m = layerid_re.search(data)
+                        if not m:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,featuretype),"Invalid featuretype '{}:{}:{}', can't find the layer id in file '{}'".format(workspace,store,featuretype,layerfile)))
+                            continue
+                        layerid = m.group("id")
+                        self.layerids[layerid] = (workspace,store,featuretype,layerfile)
+                        self.layers[(workspace,featuretype)] = (layerid,layerfile)
+
+                        m = featuretypeid_re.search(data)
+                        if not m:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,featuretype),"Invalid featuretype '{}:{}:{}', can't find the featuretype id in file '{}'".format(workspace,store,featuretype,layerfile)))
+                            continue
+
+                        featuretypeid = m.group("id")
+                        if featuretypeid not in self.featuretypeids:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,featuretype),"Invalid featuretype '{0}:{1}:{2}', the featuretype id({4}) in file '{3}' doesn't exist'".format(workspace,store,featuretype,layerfile,featuretypeid)))
+                            continue
+                        
+                        start = 0
+                        while True:
+                            m = styleid_re.search(data,start)
+                            if not m:
+                                break
+                            styleid = m.group("id")
+                            if styleid not in self.styleids:
+                                self.errors.append(("{}:{}:{}".format(workspace,store,featuretype),"Invalid featuretype '{0}:{1}:{2}', the style id({4}) in file '{3}' doesn't exist'".format(workspace,store,featuretype,layerfile,styleid)))
+                            start = m.end()
+
+                    if len(self.featuretypes.get(workspace,{}).get(store,{})) > 0:
+                        print("Load {2} featuretypes in datastore({0}:{1})".format(workspace,store,len(self.featuretypes[workspace][store])))
+
+                count = 0
+                for store,storedata in self.featuretypes.get(workspace,{}).items():
+                    count += len(storedata)
+                if count > 0:
+                    print("Load {1} featuretypes in workspace({0})".format(workspace,count))
+
+
+        count = 0
+        for workspace,workspacedata in self.featuretypes.items():
+            for store,storedata in workspacedata.items():
+                count += len(storedata)
+        if count > 0:
+            print("Load {} featuretypes".format(count))
+
+    def _load_wmslayers(self):
+        workspacespath = os.path.join(self.geoserver_data_dir,"workspaces")
+        if not os.path.exists(workspacespath):
+            return
+        for workspace in os.listdir(workspacespath):
+            if workspace == "styles":
+                continue
+            elif not os.path.isdir(os.path.join(workspacespath,workspace)):
+                #not a workspace
+                continue
+            else:
+                workspacepath = os.path.join(workspacespath,workspace)
+                if not os.path.exists(os.path.join(workspacepath,"namespace.xml")) or not os.path.exists(os.path.join(workspacepath,"workspace.xml")):
+                    #workspace is not enabled
+                    print("The workspace '{}' is not enabled".format(workspace))
+                    continue
+
+                for store in os.listdir(os.path.join(workspacepath)):
+                    if not os.path.isdir(os.path.join(workspacepath,store)):
+                        continue
+                    if not os.path.exists(os.path.join(workspacepath,store,"wmsstore.xml")):
+                        #not a datastore
+                        continue
+
+                    storepath = os.path.join(workspacepath,store)
+                    for wmslayer in os.listdir(storepath):
+                        if not os.path.isdir(os.path.join(storepath,wmslayer)):
+                            continue
+
+                        wmslayerfile = os.path.join(storepath,wmslayer,"wmslayer.xml")
+                        if not os.path.exists(wmslayerfile):
+                            self.warnings.append("{}:{}:{}".format(workspace,store,wmslayer),"Can't find the file '{3}', The wmslayer({0}:{1}:{2}) is ignored".format(workspace,store,wmslayer,wmslayerfile))
+                            continue
+
+                        with open(wmslayerfile) as f:
+                            data = f.read()
+                        m = wmslayerid_re.search(data)
+                        if not m:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,wmslayer),"Invalid wmslayer '{}:{}:{}', can't find the wmslayer id in file '{}'".format(workspace,store,wmslayer,wmslayerfile)))
+                            continue
+                        wmslayerid = m.group("id")
+                        self.wmslayerids[wmslayerid] = (workspace,store,wmslayer,wmslayerfile)
+                        if workspace not in self.wmslayers:
+                            self.wmslayers[workspace] = {}
+                        if store not in self.wmslayers[workspace]:
+                            self.wmslayers[workspace][store] = {}
+                        self.wmslayers[workspace][store][wmslayer] = (wmslayerid,wmslayerfile)
+
+                        m = namespaceid_re.search(data)
+                        if not m:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,wmslayer),"Invalid wmslayer '{}:{}:{}', can't find the namespace id in file '{}'".format(workspace,store,wmslayer,wmslayerfile)))
+                            continue
+
+                        namespaceid = m.group("id")
+                        if namespaceid not in self.namespaceids:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,wmslayer),"Invalid wmslayer '{0}:{1}:{2}', the namespace id({4}) in file '{3}' doesn't exist'".format(workspace,store,wmslayer,wmslayerfile,namespaceid)))
+                            continue
+
+                        m = wmsstoreid_re.search(data)
+                        if not m:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,wmslayer),"Invalid wmslayer '{}:{}:{}', can't find the wmsstore id in file '{}'".format(workspace,store,wmslayer,wmslayerfile)))
+                            continue
+
+                        wmsstoreid = m.group("id")
+                        if wmsstoreid not in self.wmsstoreids:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,wmslayer),"Invalid wmslayer '{0}:{1}:{2}', the wmsstore id({4}) in file '{3}' doesn't exist'".format(workspace,store,wmslayer,wmslayerfile,wmsstoreid)))
+                            continue
+
+                        layerfile = os.path.join(storepath,wmslayer,"layer.xml")
+                        if not os.path.exists(layerfile):
+                            self.warnings.append("{}:{}:{}".format(workspace,store,wmslayer),"Can't find the file '{3}', The wmslayer({0}:{1}:{2}) is ignored".format(workspace,store,wmslayer,layerfile))
+                            continue
+
+                        with open(layerfile) as f:
+                            data = f.read()
+
+                        m = layerid_re.search(data)
+                        if not m:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,wmslayer),"Invalid wmslayer '{}:{}:{}', can't find the layer id in file '{}'".format(workspace,store,wmslayer,layerfile)))
+                            continue
+                        layerid = m.group("id")
+                        self.layerids[layerid] = (workspace,store,wmslayer,layerfile)
+                        self.layers[(workspace,wmslayer)] = (layerid,layerfile)
+
+                        m = wmslayerid_re.search(data)
+                        if not m:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,wmslayer),"Invalid wmslayer '{}:{}:{}', can't find the wmslayer id in file '{}'".format(workspace,store,wmslayer,layerfile)))
+                            continue
+
+                        wmslayerid = m.group("id")
+                        if wmslayerid not in self.wmslayerids:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,wmslayer),"Invalid wmslayer '{0}:{1}:{2}', the wmslayer id({4}) in file '{3}' doesn't exist'".format(workspace,store,wmslayer,layerfile,wmslayerid)))
+                            continue
+                        
+                    if len(self.wmslayers.get(workspace,{}).get(store,{})) > 0:
+                        print("Load {2} wmslayers in wmsstore({0}:{1})".format(workspace,store,len(self.wmslayers[workspace][store])))
+
+                count = 0
+                for store,storedata in self.wmslayers.get(workspace,{}).items():
+                    count += len(storedata)
+                if count > 0:
+                    print("Load {1} wmslayers in workspace({0})".format(workspace,count))
+
+
+        count = 0
+        for workspace,workspacedata in self.wmslayers.items():
+            for store,storedata in workspacedata.items():
+                count += len(storedata)
+        if count > 0:
+            print("Load {} wmslayers".format(count))
+
+    def _load_coveragelayers(self):
+        workspacespath = os.path.join(self.geoserver_data_dir,"workspaces")
+        if not os.path.exists(workspacespath):
+            return
+        for workspace in os.listdir(workspacespath):
+            if workspace == "styles":
+                continue
+            elif not os.path.isdir(os.path.join(workspacespath,workspace)):
+                #not a workspace
+                continue
+            else:
+                workspacepath = os.path.join(workspacespath,workspace)
+                if not os.path.exists(os.path.join(workspacepath,"namespace.xml")) or not os.path.exists(os.path.join(workspacepath,"workspace.xml")):
+                    #workspace is not enabled
+                    print("The workspace '{}' is not enabled".format(workspace))
+                    continue
+
+                for store in os.listdir(os.path.join(workspacepath)):
+                    if not os.path.isdir(os.path.join(workspacepath,store)):
+                        continue
+                    if not os.path.exists(os.path.join(workspacepath,store,"coveragestore.xml")):
+                        #not a coveragestore
+                        continue
+
+                    storepath = os.path.join(workspacepath,store)
+                    for coveragelayer in os.listdir(storepath):
+                        if not os.path.isdir(os.path.join(storepath,coveragelayer)):
+                            continue
+
+                        coveragelayerfile = os.path.join(storepath,coveragelayer,"coverage.xml")
+                        if not os.path.exists(coveragelayerfile):
+                            self.warnings.append("{}:{}:{}".format(workspace,store,coveragelayer),"Can't find the file '{3}', The coveragelayer({0}:{1}:{2}) is ignored".format(workspace,store,coveragelayer,coveragelayerfile))
+                            continue
+
+                        with open(coveragelayerfile) as f:
+                            data = f.read()
+                        m = coveragelayerid_re.search(data)
+                        if not m:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,coveragelayer),"Invalid coveragelayer '{}:{}:{}', can't find the coveragelayer id in file '{}'".format(workspace,store,coveragelayer,coveragelayerfile)))
+                            continue
+                        coveragelayerid = m.group("id")
+                        self.coveragelayerids[coveragelayerid] = (workspace,store,coveragelayer,coveragelayerfile)
+                        if workspace not in self.coveragelayers:
+                            self.coveragelayers[workspace] = {}
+                        if store not in self.coveragelayers[workspace]:
+                            self.coveragelayers[workspace][store] = {}
+                        self.coveragelayers[workspace][store][coveragelayer] = (coveragelayerid,coveragelayerfile)
+
+                        m = namespaceid_re.search(data)
+                        if not m:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,coveragelayer),"Invalid coveragelayer '{}:{}:{}', can't find the namespace id in file '{}'".format(workspace,store,coveragelayer,coveragelayerfile)))
+                            continue
+
+                        namespaceid = m.group("id")
+                        if namespaceid not in self.namespaceids:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,coveragelayer),"Invalid coveragelayer '{0}:{1}:{2}', the namespace id({4}) in file '{3}' doesn't exist'".format(workspace,store,coveragelayer,coveragelayerfile,namespaceid)))
+                            continue
+
+                        m = coveragestoreid_re.search(data)
+                        if not m:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,coveragelayer),"Invalid coveragelayer '{}:{}:{}', can't find the coveragestore id in file '{}'".format(workspace,store,coveragelayer,coveragelayerfile)))
+                            continue
+
+                        coveragestoreid = m.group("id")
+                        if coveragestoreid not in self.coveragestoreids:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,coveragelayer),"Invalid coveragelayer '{0}:{1}:{2}', the coveragestore id({4}) in file '{3}' doesn't exist'".format(workspace,store,coveragelayer,coveragelayerfile,coveragestoreid)))
+                            continue
+
+                        layerfile = os.path.join(storepath,coveragelayer,"layer.xml")
+                        if not os.path.exists(layerfile):
+                            self.warnings.append("{}:{}:{}".format(workspace,store,coveragelayer),"Can't find the file '{3}', The coveragelayer({0}:{1}:{2}) is ignored".format(workspace,store,coveragelayer,layerfile))
+                            continue
+
+                        with open(layerfile) as f:
+                            data = f.read()
+
+                        m = layerid_re.search(data)
+                        if not m:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,coveragelayer),"Invalid coveragelayer '{}:{}:{}', can't find the layer id in file '{}'".format(workspace,store,coveragelayer,layerfile)))
+                            continue
+                        layerid = m.group("id")
+                        self.layerids[layerid] = (workspace,store,coveragelayer,layerfile)
+                        self.layers[(workspace,coveragelayer)] = (layerid,layerfile)
+
+                        m = coveragelayerid_re.search(data)
+                        if not m:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,coveragelayer),"Invalid coveragelayer '{}:{}:{}', can't find the coveragelayer id in file '{}'".format(workspace,store,coveragelayer,layerfile)))
+                            continue
+
+                        coveragelayerid = m.group("id")
+                        if coveragelayerid not in self.coveragelayerids:
+                            self.errors.append(("{}:{}:{}".format(workspace,store,coveragelayer),"Invalid coveragelayer '{0}:{1}:{2}', the coveragelayer id({4}) in file '{3}' doesn't exist'".format(workspace,store,coveragelayer,layerfile,coveragelayerid)))
+                            continue
+                        
+                    if len(self.coveragelayers.get(workspace,{}).get(store,{})) > 0:
+                        print("Load {2} coveragelayers in coveragestore({0}:{1})".format(workspace,store,len(self.coveragelayers[workspace][store])))
+
+                count = 0
+                for store,storedata in self.coveragelayers.get(workspace,{}).items():
+                    count += len(storedata)
+                if count > 0:
+                    print("Load {1} coveragelayers in workspace({0})".format(workspace,count))
+
+
+        count = 0
+        for workspace,workspacedata in self.coveragelayers.items():
+            for store,storedata in workspacedata.items():
+                count += len(storedata)
+        if count > 0:
+            print("Load {} coveragelayers".format(count))
+
+
+    def _load_layergroups(self):
+        workspacespath = os.path.join(self.geoserver_data_dir,"workspaces")
+        if not os.path.exists(workspacespath):
+            return
+        for workspace in os.listdir(workspacespath):
+            if workspace == "styles":
+                continue
+            elif not os.path.isdir(os.path.join(workspacespath,workspace)):
+                #not a workspace
+                continue
+            else:
+                workspacepath = os.path.join(workspacespath,workspace)
+                if not os.path.exists(os.path.join(workspacepath,"namespace.xml")) or not os.path.exists(os.path.join(workspacepath,"workspace.xml")):
+                    #not a valid workspace
+                    print("The workspace '{}' is not enabled".format(workspace))
+                    continue
+
+                layergroupspath = os.path.join(workspacepath,"layergroups")
+                if not os.path.exists(layergroupspath) or not os.path.isdir(layergroupspath):
+                    continue
+
+                for layergroupfile in os.listdir(layergroupspath):
+                    if not layergroupfile.endswith(".xml"):
+                        #not a layergroup xml file
+                        continue
+                    layergroup = layergroupfile[:-4]
+                    layergroupfile = os.path.join(layergroupspath,layergroupfile)
+
+                    with open(layergroupfile) as f:
+                        data = f.read()
+                    m = layergroupid_re.search(data)
+                    if not m:
+                        self.errors.append(("{}:{}".format(workspace,wmslayer),"Invalid layergroup '{}:{}', can't find the layergroup id in file '{}'".format(workspace,layergroup,layergroupfile)))
+                        continue
+
+                    layergroupid = m.group("id")
+                    self.layergroupids[layergroupid] = (workspace,layergroup,layergroupfile)
+                    if workspace not in self.layergroups:
+                        self.layergroups[workspace] = {}
+                    self.layergroups[workspace][layergroup] = (layergroupid,layergroupfile)
+
+                    m = workspaceid_re.search(data)
+                    if not m:
+                        self.errors.append(("{}:{}".format(workspace,layergroup),"Invalid layergroup '{}:{}', can't find the workspace id in file '{}'".format(workspace,layergroup,layergroupfile)))
+                        continue
+
+                    workspaceid = m.group("id")
+                    if workspaceid not in self.workspaceids:
+                        self.errors.append(("{}:{}".format(workspace,layergroup),"Invalid layergroup '{0}:{1}', the namespace id({3}) in file '{2}' doesn't exist'".format(workspace,layergroup,layergroupfile,workspaceid)))
+                        continue
+
+                    start = 0
+                    while True:
+                        m = layerid_re.search(data,start)
+                        if not m:
+                            break
+                        layerid = m.group("id")
+                        if layerid not in self.layerids:
+                            self.errors.append(("{}:{}".format(workspace,layergroup),"Invalid layergroup '{0}:{1}', the layer id({3}) in file '{2}' doesn't exist'".format(workspace,layergroup,layergroupfile,layerid)))
+                        start = m.end()
+
+                    start = data.find("<publishables>")
+                    if start < 0:
+                        self.errors.append(("{}:{}}".format(workspace,layergroup),"Invalid layergroup '{0}:{1}', can't find '<pubishables>' in file '{2}'".format(workspace,layergroup,layergroupfile)))
+                    else:
+                        while True:
+                            m = layergroupid_re.search(data,start)
+                            if not m:
+                                break
+                            layergroupid1 = m.group("id")
+                            if layergroupid1 == layergroupid:
+                                self.errors.append(("{}:{}".format(workspace,layergroup),"Invalid layergroup '{0}:{1}', the layergroup can't add itself as a member layer  in file '{2}'".format(workspace,layergroup,layergroupfile)))
+                            elif layergroupid1 not in self.layergroupids:
+                                self.errors.append(("{}:{}".format(workspace,layergroup),"Invalid layergroup '{0}:{1}', the member layergroup id({3}) in file '{2}' doesn't exist'".format(workspace,layergroup,layergroupfile,layergroupid1)))
+                            start = m.end()
+
+                    start = 0
+                    while True:
+                        m = styleid_re.search(data,start)
+                        if not m:
+                            break
+                        styleid = m.group("id")
+                        if styleid not in self.styleids:
+                            self.errors.append(("{}:{}".format(workspace,layergroup),"Invalid layergroup '{0}:{1}', the style id({3}) in file '{2}' doesn't exist'".format(workspace,layergroup,layergroupfile,styleid)))
+                        start = m.end()
+
+                        
+                if len(self.layergroups.get(workspace,{})) > 0:
+                    print("Load {1} wmslayers in workspace({0})".format(workspace,len(self.layergroups[workspace])))
+
+        count = 0
+        for workspace,workspacedata in self.layergroups.items():
+            count += len(workspacedata)
+        if count > 0:
+            print("Load {} layergroups".format(count))
+
+    def _load_styles(self):
+        #load the default styles 
+        self.styles["__builtin__"] = {}
+        if os.path.exists(os.path.join(self.geoserver_data_dir,"styles")):
+            for style in os.listdir(os.path.join(self.geoserver_data_dir,"styles")):
+                if not style.endswith(".xml"):
+                    continue
+                stylefile = os.path.join(self.geoserver_data_dir,"styles",style)
+                style = style[:-4]
+                with open(stylefile) as f:
+                    data = f.read()
+                m = styleid_re.search(data)
+                if not m:
+                    self.errors.append((stylefile,"Invalid style '{}', can't find the style id".format(stylefile)))
+                    continue
+    
+                styleid = m.group("id")
+                self.styleids[styleid] = ("__builtin__",style,stylefile)
+                self.styles["__builtin__"][style] = (styleid,stylefile)
+    
+            print("Load {} builtin styles".format(len(self.styles["__builtin__"])))
+
+        workspacespath = os.path.join(self.geoserver_data_dir,"workspaces")
+        if not os.path.exists(workspacespath):
+            return
+        #load styles in workspace
+        for workspace in os.listdir(workspacespath):
+            if workspace == "styles":
+                self.styles[""] = {}
+                #default styles
+                for style in os.listdir(os.path.join(workspacespath,"styles")):
+                    if not style.endswith(".xml"):
+                        continue
+                    stylefile = os.path.join(workspacespath,"styles",style)
+                    style = style[:-4]
+                    with open(stylefile) as f:
+                        data = f.read()
+                    m = styleid_re.search(data)
+                    if not m:
+                        self.errors.append((stylefile,"Invalid style '{}', can't find the style id".format(stylefile)))
+                        continue
+
+                    styleid = m.group("id")
+                    self.styleids[styleid] = ("",style,stylefile)
+                    self.styles[""][style] = (styleid,stylefile)
+
+                print("Load {} styles in workspace 'None' ".format(len(self.styles[""])))
+
+            elif not os.path.isdir(os.path.join(self.geoserver_data_dir,"workspaces",workspace)):
+                #not a workspace
+                continue
+            else:
+                workspacepath = os.path.join(self.geoserver_data_dir,"workspaces",workspace)
+                if not os.path.exists(os.path.join(workspacepath,"namespace.xml")) or not os.path.exists(os.path.join(workspacepath,"workspace.xml")):
+                    #workspace is not enabled
+                    print("The workspace '{}' is not enabled".format(workspace))
+                    self.warnings.append((workspace,"The workspace '{}' is not enabled".format(workspace)))
+                    continue
+
+                if os.path.exists(os.path.join(workspacepath,"styles")) and os.path.isdir(os.path.join(workspacepath,"styles")):
+                    self.styles[workspace] = {}
+                    for style in os.listdir(os.path.join(workspacepath,"styles")):
+                        if not style.endswith(".xml"):
+                            continue
+                        stylefile = os.path.join(workspacepath,"styles",style)
+                        style = style[:-4]
+                        with open(stylefile) as f:
+                            data = f.read()
+                        m = styleid_re.search(data)
+                        if not m:
+                            self.errors.append((stylefile,"Invalid style '{}', can't find the style id".format(stylefile)))
+                            continue
+
+                        styleid = m.group("id")
+                        self.styleids[styleid] = (workspace,style,stylefile)
+                        self.styles[workspace][style] = (styleid,stylefile)
+                    print("Load {1} styles in {0} workspace".format(workspace,len(self.styles[workspace])))
+
+        print("Load {} styles".format(len(self.styleids)))
+
+    def _load_gwclayers(self):
+        gwclayersdir = os.path.join(self.geoserver_data_dir,"gwc-layers")
+        if not os.path.exists(gwclayersdir):
+            self.errors.append(("gwc-layers","The gwc layers folder '{}' doesn't exist'".format(gwclayersdir)))
+            return
+
+        for gwclayerfile in os.listdir(gwclayersdir):
+            if not gwclayerfile.endswith(".xml"):
+                continue
+            gwclayerfile = os.path.join(gwclayersdir,gwclayerfile)
+            with open(gwclayerfile) as f:
+                data = f.read()
+
+            m = gwclayername_re.search(data)
+            if not m:
+                self.errors.append((stylefile,"Invalid gwclayer file '{}', can't find the gwclayer name".format(gwclayerfile)))
+                continue
+            gwclayername = m.group("name")
+            if ":" in  gwclayername:
+                workspace,layername = gwclayername.split(":",1)
+            else:
+                workspace  = ""
+                layername = gwclayername
+
+            if workspace not in self.gwclayers:
+                self.gwclayers[workspace] = {}
+            self.gwclayers[workspace][layername] = gwclayerfile
+            
+            m = gwclayerid_re.search(data)
+            if not m:
+                self.errors.append((stylefile,"Invalid gwclayer file '{}', can't find the layerid".format(gwclayerfile)))
+                continue
+
+            gwclayerid = m.group("id")
+            if gwclayerid.lower().startswith("layergroup"):
+                if gwclayerid not in self.layergroupids:
+                    self.errors.append((gwclayername,"Invalid gwclayer '{0}', the layergroupid({2}) in file({1}) doesn't exist".format(gwclayername,gwclayerfile,gwclayerid)))
+
+                layergroup = self.layergroups.get(workspace,{}).get(layername)
+                if not layergroup:
+                    self.errors.append((gwclayername,"Invalid gwclayer '{0}', the related layergroup({2}) referenced in file({1}) doesn't exist".format(gwclayername,gwclayerfile,gwclayername)))
+                elif layergroup[0] != gwclayerid:
+                    self.errors.append((gwclayername,"Invalid gwclayer '{0}', the layergorupid({3}) of the related layergroup({2}) doesn't match the layergroupid({4}) in file({1}) ".format(gwclayername,gwclayerfile,gwclayername,layergroup[0],gwclayerid)))
+            else:
+                if gwclayerid not in self.layerids:
+                    self.errors.append((gwclayername,"Invalid gwclayer '{0}', the layerid({2}) in file({1}) doesn't exist".format(gwclayername,gwclayerfile,gwclayerid)))
+                layer = self.layers.get((workspace,layername))
+                if not layer:
+                    self.errors.append((gwclayername,"Invalid gwclayer '{0}', the related layer({2}) referenced in file({1}) doesn't exist".format(gwclayername,gwclayerfile,gwclayername)))
+                elif layer[0] != gwclayerid:
+                    self.errors.append((gwclayername,"Invalid gwclayer '{0}', the layerid({3}) of the related layergroup({2}) doesn't match the layerid({4}) in file({1}) ".format(gwclayername,gwclayerfile,gwclayername,layer[0],gwclayerid)))
+
+        count = 0
+        for workspace,workspacedata in self.gwclayers.items():
+            print("Load {1} gwc layers in workspace({0})".format(workspace,len(workspacedata)))
+            count += len(workspacedata)
+        print("Load {} gwc layers".format(count))
+
+
+    def check(self):
+        self._load_workspaces()
+        self._load_styles()
+        self._load_datastores()
+        self._load_wmsstores()
+        self._load_coveragestores()
+        self._load_featuretypes()
+        self._load_wmslayers()
+        self._load_coveragelayers()
+        self._load_layergroups()
+        self._load_gwclayers()
+
+        if self.warnings:
+            print("""Found {} warnings
+    {}""".format(
+        len(self.warnings),
+        "\n    ".join( "{} : {}".format(*msg) for msg in self.warnings)
+        ))
+        else:
+            print("No warnings found")
+
+        if self.errors:
+            print("""Found {} errorss
+    {}""".format(
+        len(self.errors),
+        "\n    ".join( "{} : {}".format(*msg) for msg in self.errors)
+        ))
+        else:
+            print("No errors found")
+
+if __name__ == '__main__':
+    geoserver_data_dir = os.environ["GEOSERVER_DATA_DIR"]
+
+    consistencycheck = GeoserverDataConsistencyCheck(geoserver_data_dir)
+    consistencycheck.check()
+

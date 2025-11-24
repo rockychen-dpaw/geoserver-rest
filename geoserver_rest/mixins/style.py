@@ -101,6 +101,15 @@ class StyleMixin(object):
     def get_style(self,workspace,stylename):
         return self.get(self.style_url(workspace,stylename),headers=self.accept_header("json")).json()["style"]
     
+    def get_sld(self,workspace,stylename):
+        sldversion = self.get_style(workspace,stylename)["languageVersion"]["version"]
+        if sldversion == "1.1.0" or sldversion == "1.1":
+            sld_content_type = "application/vnd.ogc.se+xml"
+        else:
+            sld_content_type = "application/vnd.ogc.sld+xml"
+    
+        return self.get("{}.sld".format(self.style_url(workspace,stylename)),headers={"Accept": sld_content_type}).text
+
     def has_style(self,workspace,stylename):
         return self.has(self.style_url(workspace,stylename),headers=self.accept_header("json"))
     

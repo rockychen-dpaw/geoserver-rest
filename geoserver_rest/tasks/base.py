@@ -24,11 +24,14 @@ class Task(object):
     keyarguments = None
     post_actions_factory = None
 
+    trieddata = None
+    taskrunner = None
+
     _messages = None
     def __init__(self,post_actions_factory = None):
-        self.retries = settings.TASK_RETRIES.get(self.__class__.__name__,1)
-        if self.retries < 1:
-            self.retries = 1
+        self.attempts = settings.TASK_ATTEMPTS.get(self.__class__.__name__,settings.TASK_ATTEMPTS.get("__DEFAULT__",1))
+        if self.attempts < 1:
+            self.attempts = 1
         if post_actions_factory:
             self.post_actions_factory = post_actions_factory
 
@@ -56,6 +59,17 @@ class Task(object):
         return separator.join("{}={}".format(k,json.dumps(v)) for k,v in self.parameters)
 
     @property
+    def triedmsg(self):
+        if self.trieddata:
+            return """=======================================
+{} more attempts:
+    {}
+""".format(len(self.trieddata),"\n    ---------------------\n    ".join( "Start Time : {} , End Time : {} , Exec time : {} seconds , Exception : {}".format(timezone.format(starttime,"%Y-%m-%d %H:%M:%S.%f"),timezone.format(endtime,"%Y-%m-%d %H:%M:%S.%f"),(endtime - starttime).total_seconds() if starttime and endtime else "",str(ex)) for starttime,endtime,ex in self.trieddata))
+        else:
+            return None
+            
+
+    @property
     def exec_result(self):
         msg = None
         try:
@@ -65,13 +79,18 @@ class Task(object):
 
         if msg:
             if self.exceptions:
-               return "{}\r\n{}".format(msg,"\r\n".join("{}({})".format(ex.__class__.__name__,str(ex)) for ex in self.exceptions))
-            else:
-               return msg
+               msg = "{}\r\n{}".format(msg,"\r\n".join("{}({})".format(ex.__class__.__name__,str(ex)) for ex in self.exceptions))
         elif self.exceptions:
-            return "\r\n".join("{}({})".format(ex.__class__.__name__,str(ex)) for ex in self.exceptions)
+            msg = "\r\n".join("{}({})".format(ex.__class__.__name__,str(ex)) for ex in self.exceptions)
+
+        triedmsg = self.triedmsg
+        if triedmsg:
+            if msg:
+                return "{}\n{}".format(msg,triedmsg)
+            else:
+                return triedmsg
         else:
-            return ""
+            return msg
 
     def _format_result(self):
         return json.dumps(self.result) if self.result else ""
@@ -98,6 +117,8 @@ class Task(object):
         """
         Report the execute exception and the warnings and errors from task result
         """
+        triedmsg = self.triedmsg
+
         if self.exceptions:
             msg = "\r\n".join( "{}({})".format(ex.__class__.__name__,str(ex)) if isinstance(ex,requests.RequestException) else "\r\n".join(traceback.format_exception(type(ex),ex    ,ex.__traceback__)) for ex in self.exceptions)
             try:
@@ -106,6 +127,9 @@ class Task(object):
                 url = None
             if url and url not in msg:
                 msg = "URL: {}\r\n{}".format(url,msg)
+
+            if triedmsg:
+                msg = "{}\n{}".format(msg,triedmsg)
 
             yield (self.category,
                 self.format_parameters("\r\n"),
@@ -116,8 +140,13 @@ class Task(object):
                 msg
             )
 
+        add_triedmsg = True if triedmsg else False
         if self.is_succeed:
             for level,msg in (self._messages or []):
+                if add_triedmsg:
+                    add_triedmsg = False
+                    msg = "{}\n{}".format(msg,triedmsg)
+
                 yield (self.category,
                     self.format_parameters("\r\n"),
                     level,
@@ -128,6 +157,10 @@ class Task(object):
                 )
 
             for level,msg in (self._warnings() or []):
+                if add_triedmsg:
+                    add_triedmsg = False
+                    msg = "{}\n{}".format(msg,triedmsg)
+
                 yield (self.category,
                     self.format_parameters("\r\n"),
                     level,
@@ -178,25 +211,41 @@ class Task(object):
     def run(self,geoserver):
         self.starttime = timezone.localtime()
         try:
-            retry = 0
-            while True:
-                try:
-                    self.result = self._exec(geoserver)
-                    break
-                except requests.ConnectionError as ex:
-                    if (timezone.localtime() - self.starttime).total_seconds() < settings.GEOSERVER_RESTART_TIMEOUT:
-                        logger.error("The geoserver() is not available.".format(geoserver.geoserver_url))
-                        time.sleep(10)
-                    else:
-                        retry += 1
-                        if retry < self.retries:
-                            time.sleep(5)
-                        else:
-                            raise
+            self.result = self._exec(geoserver)
+            self.attempts -= 1
         except Exception as ex:
-            logger.error(traceback.format_exc())
-            self.exceptions = [ex]
-            self.result = None
+            if not isinstance(ex,requests.ConnectionError):
+                #failed not because  geoserver is not ready, reduce the attempts by 1
+                exmsg = str(ex).lower()
+                if any(msg in exmsg for msg in [
+                        "the requested style can not be used with this layer",
+                        "unknown wkb type",
+                        "errors while inspecting the location of an external graphic",
+                        "unknown font",
+                        "exceptioncode=\"tileoutofrange\"",
+                        "http error code 401"
+                ]):
+                    #this issues can't be fixed by retry
+                    self.attempts = 0
+                else:
+                    self.attempts -= 1
+
+            logger.error("{0}: Failed to process the task {1}.\n{2}".format(geoserver,self,traceback.format_exc()))
+            if self.attempts < 1:
+                #no more try
+                self.exceptions = [ex]
+                self.result = None
+                logger.info("Failed to process task({1}({0}))\n{2}".format(geoserver,self,self.triedmsg))
+            else:
+                if not self.trieddata:
+                    self.trieddata = [(self.starttime,timezone.localtime(),ex)]
+                else:
+                    self.trieddata.append((self.starttime,timezone.localtime(),ex))
+                #readd this task as retry tasks
+                logger.info("Task({1}({0})) is scheduled to retry".format(geoserver,self))
+                self.taskrunner.add_retrytask(self)
+
+                return
         finally:
             self.endtime = timezone.localtime()
 
@@ -215,6 +264,9 @@ class Task(object):
                         
     def _exec(self,geoserver):
         raise Exception("Not implemented")
+
+    def __str__(self):
+        return "{}({})".format(self.category,",".join("{}={}".format(k,json.dumps(v)) for k,v in self.keyparameters))
 
 
 class OutOfSyncTask(Task):

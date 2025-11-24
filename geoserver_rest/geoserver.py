@@ -90,8 +90,8 @@ class GeoserverUtils(object):
 {2}""".format(res.request.url,str(ex),res.text)
                 raise ex.__class__(msg,response=res)
 
-class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMixin,LayergroupMixin,ReloadMixin,SecurityMixin,StyleMixin,WMSLayerMixin,WMSStoreMixin,WorkspaceMixin,UsergroupMixin,RolesMixin,GeoserverUtils):
-    def __init__(self,geoserver_url,username,password,headers=None):
+class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMixin,LayergroupMixin,ReloadMixin,SecurityMixin,StyleMixin,WMSLayerMixin,WMSStoreMixin,WorkspaceMixin,UsergroupMixin,CoverageStoreMixin,CoverageMixin,RolesMixin,GeoserverUtils):
+    def __init__(self,geoserver_url,username,password,headers=None,ssl_verify=True):
         assert geoserver_url,"Geoserver URL is not configured"
         assert username,"Geoserver user is not configured"
         assert password,"Geoserver user password is not configured"
@@ -99,6 +99,11 @@ class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMi
         self.username = username
         self.password = password
         self.headers = headers
+        self.ssl_verify = ssl_verify
+
+
+    def __str__(self):
+        return self.geoserver_url
 
 
     def get(self,url,headers=GeoserverUtils.accept_header("json"),timeout=settings.REQUEST_TIMEOUT,error_handler=None):
@@ -108,7 +113,7 @@ class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMi
                 headers = collections.ChainMap(headers,self.headers)
             else:
                 headers = self.headers
-        res = requests.get(url , headers=headers, auth=(self.username,self.password),timeout=timeout)
+        res = requests.get(url , headers=headers, auth=(self.username,self.password),timeout=timeout,verify=self.ssl_verify)
         (error_handler or self._handle_response_error)(res)
         return res
 
@@ -126,7 +131,7 @@ class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMi
                 headers = collections.ChainMap(headers,self.headers)
             else:
                 headers = self.headers
-        res = requests.post(url , data=data , headers=headers, auth=(self.username,self.password),timeout=timeout)
+        res = requests.post(url , data=data , headers=headers, auth=(self.username,self.password),timeout=timeout,verify=self.ssl_verify)
         (error_handler or self._handle_response_error)(res)
         return res
 
@@ -137,7 +142,7 @@ class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMi
                 headers = collections.ChainMap(headers,self.headers)
             else:
                 headers = self.headers
-        res = requests.put(url , data=data , headers=headers, auth=(self.username,self.password),timeout=timeout)
+        res = requests.put(url , data=data , headers=headers, auth=(self.username,self.password),timeout=timeout,verify=self.ssl_verify)
         (error_handler or self._handle_response_error)(res)
         return res
 
@@ -150,7 +155,7 @@ class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMi
                 headers = self.headers
 
 
-        res = requests.delete(url , auth=(self.username,self.password),headers=headers,timeout=timeout)
+        res = requests.delete(url , auth=(self.username,self.password),headers=headers,timeout=timeout,verify=self.ssl_verify)
         (error_handler or self._handle_response_error)(res)
         return res
 
@@ -197,3 +202,13 @@ class Geoserver(WMSServiceMixin,AboutMixin,DatastoreMixin,FeaturetypeMixin,GWCMi
                 layergroups.append(data)
              
         return (featuretypes,wmslayers,layergroups)
+
+
+def get_default_geoserver():
+    geoserver_url = os.environ["GEOSERVER_URL"]
+    geoserver_user = os.environ["GEOSERVER_USER"]
+    geoserver_password = os.environ["GEOSERVER_PASSWORD"]
+    geoserver_ssl_verify = os.environ.get("GEOSERVER_SSL_VERIFY","true").lower() == "true"
+
+    return Geoserver(geoserver_url,geoserver_user,geoserver_password,headers=settings.GET_REQUEST_HEADERS("GEOSERVER_REQUEST_HEADERS"),ssl_verify=geoserver_ssl_verify)
+

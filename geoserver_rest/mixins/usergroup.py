@@ -198,7 +198,7 @@ class UsergroupMixin(object):
             headers = collections.ChainMap(self.accept_header("json"),self.headers)
         else:
             headers = self.accept_header("json")
-        res = requests.get(self.login_url() , headers=headers, auth=(user,password),timeout=settings.REQUEST_TIMEOUT,allow_redirects=False)
+        res = requests.get(self.login_url() , headers=headers, auth=(user,password),timeout=settings.REQUEST_TIMEOUT,allow_redirects=False,verify=self.ssl_verify)
         if res.status_code == 401:
             #authenticate failed
             return False

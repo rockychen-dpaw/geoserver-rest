@@ -12,7 +12,6 @@ import itertools
 from collections import OrderedDict
 from datetime import datetime
 
-from .taskrunner import TaskRunner
 from .geoserver import Geoserver
 from .tasks import *
 from .csv import CSVWriter
@@ -42,20 +41,18 @@ class GeoserverCompatibilityCheck(object):
     _layers = {}
     wmsserver = None
     
-    def __init__(self,geoserver_url,geoserver_user,geoserver_password,requestheaders=None):
-        self.geoserver = Geoserver(geoserver_url,geoserver_user,geoserver_password,headers=requestheaders)
+    def __init__(self,geoserver_url,geoserver_user,geoserver_password,requestheaders=None,ssl_verify=True):
+        self.geoserver = Geoserver(geoserver_url,geoserver_user,geoserver_password,headers=requestheaders,ssl_verify=ssl_verify)
         if os.environ.get("WMSSERVER_URL") and  os.environ.get("SAMPLE_DATASET"):
             self.wmsserver = Geoserver(
                 os.environ.get("WMSSERVER_URL"),
                 os.environ.get("WMSSERVER_USER"),
                 os.environ.get("WMSSERVER_PASSWORD"),
-                headers=settings.GET_REQUEST_HEADERS("WMSSERVER_REQUEST_HEADERS")
+                headers=settings.GET_REQUEST_HEADERS("WMSSERVER_REQUEST_HEADERS"),
+                ssl_verify= os.environ.get("WMSSERVER_SSL_VERIFY","True").lower() == "true"
             )
         self._resources = OrderedDict()
         self._checklist = OrderedDict()
-
-    def run(self):
-        pass
 
     @property
     def style_folder(self):
@@ -381,7 +378,7 @@ class GeoserverCompatibilityCheck(object):
                         with open(os.path.join(stylefolder,f),'r') as fin:
                             styledata = fin.read()
                             self.geoserver.update_style(wsname,stylename,styleversion,styledata)
-                        if self.geoserver.has_style(wsname,stylename):
+                        if self.geoserver.has_style(wsname,stylename) :
                             self._add_container_resource("workspaces",wsname,"styles",layername,stylename,parameters={"version":styleversion,"style":styledata})
                             self._update_checklist("style","create",[True,"Succeed to create the style '{}.{}'".format(wsname,stylename)])
                             self._update_checklist("style","create",self.post_create_style(wsname,stylename,styleversion,styledata))
@@ -431,7 +428,7 @@ class GeoserverCompatibilityCheck(object):
                         #update style
                         self.geoserver.update_style(wsname,defaultstyle,self._resources["workspaces"][wsname]["styles"][layername][style]["__parameters__"]["version"],self._resources["workspaces"][wsname]["styles"][layername][style]["__parameters__"]["style"])
                         image_defaultstyle_updated = self.geoserver.get_map(wsname,layername,bbox,srs=srs,width=1024,height=1024,format="image/jpeg")
-                        if not filecmp.cmp(image_defaultstyle_updated,image_style):
+                        if not filecmp.cmp(image_defaultstyle_updated,image_style) and self.geoserver.get_sld(wsname,defaultstyle) == self.geoserver.get_sld(wsname,style):
                             raise Exception("The image of layer({}.{}.{}) with same style  should be same. style={}".format(wsname,storename,layername,style))
                         else:
                             self._update_checklist("style","update",[True,"Succeed to update the style '{}.{}.{}'".format(wsname,layername,defaultstyle)])
@@ -696,7 +693,7 @@ class GeoserverCompatibilityCheck(object):
         self.delete_resources_in_wmsserver()
 
         dataset = os.environ.get("SAMPLE_DATASET")
-        wsname = "featuretype{}".format(self.sufix)
+        wsname = "featuretype{}".format(self.basesufix)
 
         #create workspace
         self.wmsserver.create_workspace(wsname)
@@ -712,10 +709,10 @@ class GeoserverCompatibilityCheck(object):
             raise Exception("Failed to update the layer access rule({1}) in wms server({0})".format(self.wmsserver.geoserver_url,access_rules))
 
         #create datastore
-        storename = "localds{}".format(self.sufix)
+        storename = "localds{}".format(self.basesufix)
         #find the layer name via publishing the f
         self.wmsserver.upload_dataset(wsname,storename,dataset)
-        if not self.geoserver.has_datastore(wsname,storename):
+        if not self.wmsserver.has_datastore(wsname,storename):
             raise Exception("Failed to create the datastore '{1}.{2}' from local dataset({3}) in wms server({0})".format(self.wmsserver.geoserver_url,wsname,storename,dataset))
 
         #publish featuretype
@@ -772,7 +769,7 @@ class GeoserverCompatibilityCheck(object):
     def delete_resources_in_wmsserver(self):
         if not self.wmsserver:
             return
-        wsname = "featuretype{}".format(self.sufix)
+        wsname = "featuretype{}".format(self.basesufix)
         if self.wmsserver.has_workspace(wsname):
             self.wmsserver.delete_workspace(wsname,recurse=True)
 
@@ -872,7 +869,7 @@ class GeoserverCompatibilityCheck(object):
         if not self.wmsserver:
             return
 
-        wsname = "featuretype{}".format(self.sufix)
+        wsname = "featuretype{}".format(self.basesufix)
 
         dataset = os.environ.get("SAMPLE_DATASET")
         nativename = os.path.splitext(os.path.basename(dataset))[0]
@@ -1262,7 +1259,7 @@ class GeoserverCompatibilityCheck(object):
 
                         waiting = 35 - (datetime.now() - after_fetch).total_seconds()
                         if waiting > 0:
-                            logger.debug("Wait {} exconds to expire the gwc cache".format(waiting))
+                            logger.debug("Wait {} seconds to expire the gwc cache".format(waiting))
                             time.sleep(waiting)
                         else:
                             logger.debug("The gwc cache is already expired")
@@ -1275,6 +1272,7 @@ class GeoserverCompatibilityCheck(object):
                         self._update_checklist("gwclayer",operation,[True,"Change the default style: The cache expire feature of the gwc layer '{}.{}' is working.".format(wsname,layername)])
                         self._update_checklist("gwclayer",operation,self.post_gwccache_expire(wsname,layername,tile_afterexpire))
                     except Exception as ex:
+                        traceback.print_exc()
                         self._update_checklist("gwclayer",operation,[False,"The cache expire feature of the gwc layer '{}.{}' isn't working'. {}:{}".format(wsname,layername,ex.__class__.__name__,ex)])
                     finally:
                         utils.remove_file(tile_original)
@@ -1351,6 +1349,7 @@ class GeoserverCompatibilityCheck(object):
                         self._update_checklist("gwclayer",operation,[True,"Change the default style: Succeed to empty the cache of the gwc layer '{}.{}'.".format(wsname,layername)])
                         self._update_checklist("gwclayer",operation,self.post_empty_gwccache(wsname,layername,tile_afterclear))
                     except Exception as ex:
+                        traceback.print_exc()
                         self._update_checklist("gwclayer",operation,[False,"Failed to empty the cache of the gwc layer '{}.{}'. {}:{}".format(wsname,layername,ex.__class__.__name__,ex)])
                     finally:
                         utils.remove_file(tile_original)
@@ -1711,7 +1710,6 @@ class GeoserverCompatibilityCheck(object):
 
             if geoserveruser_roles:
                 roles.append(geoserveruser_roles[0])
-
             access_rules["{}.*.r".format(wsname)] =",".join(roles)
 
         if not access_rules:
@@ -1721,12 +1719,24 @@ class GeoserverCompatibilityCheck(object):
             self.geoserver.patch_layer_access_rules(access_rules)
             original_rules.update(access_rules)
             latest_rules = self.geoserver.get_layer_access_rules()
+            for key in latest_rules.keys():
+                value = latest_rules[key]
+                values = [v.strip() for v in value.split(",")]
+                values.sort()
+                latest_rules[key] = ",".join(values)
+
+            for key in original_rules.keys():
+                value = original_rules[key]
+                values = [v.strip() for v in value.split(",")]
+                values.sort()
+                original_rules[key] = ",".join(values)
+
             if original_rules == latest_rules:
                 self._set_resource(access_rules,"layer_access_rules")
                 self._update_checklist("layer_access_permission",operation,[True,"Succeed to grant the layer access permission {}.".format(access_rules)])
                 self._update_checklist("layer_access_permission",operation,self.post_grant_layer_access_permission(access_rules))
             else:
-                self._update_checklist("layer_access_permission",operation,[False,"Failed to grant the layer access permission.revoked access rules:{} , original access rules:{} , access rules after revoking:{}".format(access_rules,original_rules,latest_rules)])
+                self._update_checklist("layer_access_permission",operation,[False,"Failed to grant the layer access permission.access rules:{} , original access rules:{} , access rules after granting:{}".format(access_rules,original_rules,latest_rules)])
         except Exception as ex:
             self._update_checklist("layer_access_permission",operation,[False,"Failed to grant the layer access permission {}. {}".format(access_rules,ex)])
 
@@ -1753,7 +1763,7 @@ class GeoserverCompatibilityCheck(object):
                 self._update_checklist("layer_access_permission",operation,[True,"Succeed to revoke the layer access permission {}.".format(access_rules)])
                 self._update_checklist("layer_access_permission",operation,self.post_revoke_layer_access_permission(delete_permissions))
             else:
-                self._update_checklist("layer_access_permission",operation,[False,"Failed to revoke the layer access permission {}.".format(access_rules)])
+                self._update_checklist("layer_access_permission",operation,[False,"Failed to revoke the layer access permission {}.expected access permissions={}, final access permissions={}.".format(access_rules,original_rules,latest_rules)])
         except Exception as ex:
             self._update_checklist("layer_access_permission",operation,[False,"Failed to revoke the layer access permission {}. {}:{}".format(access_rules,ex.__class__.__name__,ex)])
         
@@ -1766,54 +1776,114 @@ class GeoserverCompatibilityCheck(object):
         #reset the test env
         checkagain = False
         for role in self.geoserver.list_roles():
-            if role.endswith(self.sufix):
+            if role.endswith(self.basesufix):
                 logger.debug("Delete the testing role '{}'".format(role))
                 self.geoserver.delete_role(role)
                 checkagain = True
 
         if checkagain:
             for role in self.geoserver.list_roles():
-                if role.endswith(self.sufix):
+                if role.endswith(self.basesufix):
                     raise Exception("Failed to delete the testing role '{}'".format(role))
             checkagain = False
 
         for user in self.geoserver.list_users():
-            if user[0].endswith(self.sufix):
+            if user[0].endswith(self.basesufix):
                 logger.debug("Delete the testing user '{}'".format(user[0]))
                 self.geoserver.delete_user(user[0])
                 checkagain = True
 
         if checkagain:
             for user in self.geoserver.list_users():
-                if user[0].endswith(self.sufix):
+                if user[0].endswith(self.basesufix):
                     raise Exception("Failed to delete the testing user '{}'".format(user[0]))
             checkagain = False
 
         for usergroup in self.geoserver.list_usergroups():
-            if usergroup.endswith(self.sufix):
+            if usergroup.endswith(self.basesufix):
                 logger.debug("Delete the testing usergroup '{}'".format(usergroup))
                 self.geoserver.delete_usergroup(usergroup)
                 checkagain = True
 
         if checkagain:
             for usergroup in self.geoserver.list_usergroups():
-                if usergroup.endswith(self.sufix):
+                if usergroup.endswith(self.basesufix):
                     raise Exception("Failed to delete the testing usergroup '{}'".format(usergroup))
             checkagain = False
 
+        access_rules = self.geoserver.get_layer_access_rules()
+        delete_rules = [r for r in access_rules.keys() if r.endswith(self.basesufix)]
+        if delete_rules:
+            logger.debug("Delete the layer access rules '{}'".format(delete_rules))
+            self.geoserver.patch_layer_access_rules(delete_permissions=delete_rules)
+            access_rules = self.geoserver.get_layer_access_rules()
+            delete_rules = [r for r in access_rules.keys() if r.endswith(self.basesufix)]
+            if delete_rules:
+                logger.debug("Failed to delete the layer access rules '{}'".format(delete_rules))
+
         for wsname in self.geoserver.list_workspaces():
-            if wsname.endswith(self.sufix):
+            if wsname.endswith(self.basesufix):
                 logger.debug("Delete the testing workspace '{}'".format(wsname))
                 self.geoserver.delete_workspace(wsname,recurse=True)
                 checkagain = True
 
         if checkagain:
             for wsname in self.geoserver.list_workspaces():
-                if wsname.endswith(self.sufix):
+                if wsname.endswith(self.basesufix):
                     logger.debug("Failed to delete the testing workspace '{}'".format(wsname))
             checkagain = False
 
         logger.debug("Succeed to reset checking env of geoserver({})".format(self.geoserver.geoserver_url))
+
+        self.post_reset_checking_env()
+
+    def post_reset_checking_env(self):
+        pass
+
+    def get_wfs_capabilities(self):
+        operation = "get"
+        try:
+            file = "/tmp/wfscapabilities_{}.xml".format(self.sufix)
+            self.geoserver.get_wfscapabilities(outputfile=file)
+            self._update_checklist("get_wfs_capabilities",operation,[True,"Succeed to get the wfs capabilities"])
+            self._update_checklist("get_wfs_capabilities",operation,self.post_get_wfs_capabilities(file))
+        except Exception as ex:
+            self._update_checklist("get_wfs_capabilities",operation,[False,"Failed to get the wfs capabilities.{}".format(ex)])
+        finally:
+            utils.remove_file(file)
+
+    def post_get_wfs_capabilities(self,master_capabilities_xmlfile):
+        pass
+
+    def get_wms_capabilities(self):
+        operation = "get"
+        try:
+            file = "/tmp/wmscapabilities_{}.xml".format(self.sufix)
+            self.geoserver.get_wmscapabilities(outputfile=file)
+            self._update_checklist("get_wms_capabilities",operation,[True,"Succeed to get the wms capabilities"])
+            self._update_checklist("get_wms_capabilities",operation,self.post_get_wms_capabilities(file))
+        except Exception as ex:
+            self._update_checklist("get_wms_capabilities",operation,[False,"Failed to get the wms capabilities.{}".format(ex)])
+        finally:
+            utils.remove_file(file)
+
+    def post_get_wms_capabilities(self,master_capabilities_xmlfile):
+        pass
+
+    def get_wmts_capabilities(self):
+        operation = "get"
+        try:
+            file = "/tmp/wmtscapabilities_{}.xml".format(self.sufix)
+            self.geoserver.get_wmtscapabilities(outputfile=file)
+            self._update_checklist("get_wmts_capabilities",operation,[True,"Succeed to get the wmts capabilities"])
+            self._update_checklist("get_wmts_capabilities",operation,self.post_get_wmts_capabilities(file))
+        except Exception as ex:
+            self._update_checklist("get_wmts_capabilities",operation,[False,"Failed to get the wmts capabilities.{}".format(ex)])
+        finally:
+            utils.remove_file(file)
+
+    def post_get_wmts_capabilities(self,master_capabilities_xmlfile):
+        pass
 
     def run(self):
         try:
@@ -1864,7 +1934,11 @@ class GeoserverCompatibilityCheck(object):
 
             self.check_wmts_cache_expire()
             self.check_wmts_empty_cache()
-            
+
+            self.get_wfs_capabilities()
+            self.get_wms_capabilities()
+            self.get_wmts_capabilities()
+
             self.delete_wmtslayer()
             self.delete_layergroup()
             self.delete_wmslayer()
@@ -1880,9 +1954,9 @@ class GeoserverCompatibilityCheck(object):
             self.delete_usergroup()
             
         finally:
-        
             self.reset_checking_env()
             self.delete_resources_in_wmsserver()
+            pass
             
 
 
@@ -1911,7 +1985,8 @@ if __name__ == '__main__':
     geoserver_url = os.environ["GEOSERVER_URL"]
     geoserver_user = os.environ.get("GEOSERVER_USER")
     geoserver_password = os.environ.get("GEOSERVER_PASSWORD")
+    geoserver_ssl_verify = os.environ.get("GEOSERVER_SSL_VERIFY","True").lower() == "true"
 
-    compatibilitycheck = GeoserverCompatibilityCheck(geoserver_url,geoserver_user,geoserver_password,settings.GET_REQUEST_HEADERS("GEOSERVER_REQUEST_HEADERS"))
+    compatibilitycheck = GeoserverCompatibilityCheck(geoserver_url,geoserver_user,geoserver_password,settings.GET_REQUEST_HEADERS("GEOSERVER_REQUEST_HEADERS"),ssl_verify=geoserver_ssl_verify)
     compatibilitycheck.run()
 

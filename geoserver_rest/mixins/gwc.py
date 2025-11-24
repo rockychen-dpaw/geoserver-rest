@@ -4,6 +4,7 @@ import collections
 import requests
 import math
 import urllib.parse
+import traceback
 import tempfile
 
 from ..exceptions import *
@@ -35,17 +36,6 @@ LAYER_DATA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
             </styleParameterFilter>
         </parameterFilters>
     </GeoServerLayer>
-"""
-EMPTY_LAYER_TEMPLATE="""<?xml version="1.0" encoding="UTF-8"?>
-    <seedRequest>
-        <name>{0}:{1}</name>
-        <gridSetId>{2}</gridSetId>
-        <zoomStart>0</zoomStart>
-        <zoomStop>24</zoomStop>
-        <type>truncate</type>
-        <format>{3}</format>
-        <threadCount>1</threadCount>
-    </seedRequest>
 """
 FORMAT_TEMPLATE = """<string>{}</string>"""
 """
@@ -124,7 +114,7 @@ class GridsetUtil(object):
 
     def get_bbox_tile(self,bbox):
         """
-        bbox : [minx,miny,maxx,maxy]
+        bbox : [minx,miny,maxx,maxy] [minLon,minLat,maxLon,maxLat]
         Return (zoom,x,y)
         """
         zoom = 5
@@ -176,6 +166,8 @@ class EPSG4326Util(GridsetUtil):
         xtile = int((lon_deg + 180.0) / 360.0 * math.pow(2.0,zoom + 1))
         #lat_rad = math.radians(lat_deg)
         #ytile = int((1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * math.pow(2.0,zoom))
+        #lat_rad = math.radians(lat_deg)
+        #ytile = int((1.0 - math.log(math.tan(lat_rad) + (1 / math.cos(lat_rad))) / math.pi) / 2.0 * zoom)
         ytile = int((lat_deg - 90.0) / -180.0 * math.pow(2.0,zoom))
         return (xtile, ytile)
 
@@ -238,7 +230,22 @@ class GWCMixin(object):
         return "{}/gwc/service/wmts?service=WMTS&version=1.1.1&request=GetCapabilities".format(self.geoserver_url)
 
     def get_wmtscapabilities(self,version="1.1.1",outputfile=None):
+        while True:
+            attempts = 0
+            try:
+                attempts += 1
+                res = self.get(self.wmtscapabilities_url(version=version),headers=self.accept_header("xml"),timeout=settings.GETCAPABILITY_TIMEOUT)
+                break
+            except Exception as ex:
+                if attempts > 10:
+                    raise
+                elif "InvalidChunkLength" in str(ex):
+                    time.sleep(1)
+                    continue
+                else:
+                    raise
         res = self.get(self.wmtscapabilities_url(version=version),headers=self.accept_header("xml"),timeout=settings.GETCAPABILITY_TIMEOUT)
+
         if outputfile:
             output = open(outputfile,'wb')
         else:
@@ -253,7 +260,11 @@ class GWCMixin(object):
         try:
             for data in res.iter_content(chunk_size = 1024):
                 output.write(data)
-            logger.debug("WMTS capabilities was saved to {}".format(outputfile))
+            if attempts == 1:
+                logger.debug("WMTS capabilities was saved to {}".format(outputfile))
+            else:
+                logger.debug("WMTS capabilities was saved to {}. but tried {} times.".format(outputfile,attempts))
+
             return outputfile
         finally:
             output.close()
@@ -385,9 +396,14 @@ class GWCMixin(object):
                     bbox = self.get_wmslayer_field(layerdata,"latLonBoundingBox")
                     bbox = (bbox["minx"],bbox["miny"],bbox["maxx"],bbox["maxy"])
                 except ResourceNotFound as ex:
-                    layerdata = self.get_layergroup(workspace,layername)
-                    bbox = self.get_layergroup_field(layerdata,"bounds")
-                    bbox = (bbox["minx"],bbox["miny"],bbox["maxx"],bbox["maxy"])
+                    try:
+                        layerdata = self.get_coverage(workspace,layername)
+                        bbox = self.get_coverage_field(layerdata,"latLonBoundingBox")
+                        bbox = (bbox["minx"],bbox["miny"],bbox["maxx"],bbox["maxy"])
+                    except ResourceNotFound as ex:
+                        layerdata = self.get_layergroup(workspace,layername)
+                        bbox = self.get_layergroup_field(layerdata,"bounds")
+                        bbox = (bbox["minx"],bbox["miny"],bbox["maxx"],bbox["maxy"])
             zoom,column,row = GridsetUtil.get_instance(self.get_gridset(gridset)["srs"]).get_bbox_tile(bbox)
 
         url = self.tile_url(workspace,layername,zoom,row,column,gridset=gridset,format=format,style=style,version=version)
@@ -398,11 +414,11 @@ class GWCMixin(object):
                 try:
                     msg = res.text
                 except:
-                    raise GetMapFailed("Failed to get the map of layer({}:{}).Expect '{}', but got '{}'".format(workspace,layername,format,res.headers.get("content-type","")))
+                    raise GetMapFailed("Failed to get the map of layer({}:{}).Expect '{}', but got '{}'".format(workspace,layername,format,res.headers.get("content-type","")),res)
 
-                raise GetMapFailed("Failed to get the map of layer({}:{}).{}".format(workspace,layername,msg))
+                raise GetMapFailed("Failed to get the map of layer({}:{}).{}".format(workspace,layername,msg),res)
             else:
-                raise GetMapFailed("Failed to get the map of layer({}:{}).Expect '{}', but got '{}'".format(workspace,layername,format,res.headers.get("content-type","")))
+                raise GetMapFailed("Failed to get the map of layer({}:{}).Expect '{}', but got '{}'".format(workspace,layername,format,res.headers.get("content-type","")),res)
         if outputfile:
             output = open(outputfile,'wb')
         else:

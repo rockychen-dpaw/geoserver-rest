@@ -1,7 +1,7 @@
 # Prepare the base environment.
-FROM python:3.12.3-slim-bookworm as builder_base_geoserver_healthcheck
-MAINTAINER asi@dbca.wa.gov.au
-LABEL org.opencontainers.image.source https://github.com/dbca-wa/geoserver
+FROM python:3.12.3-slim-bookworm AS builder_base_geoserver_healthcheck
+LABEL org.opencontainers.image.authors=asi@dbca.wa.gov.au
+LABEL org.opencontainers.image.source=https://github.com/dbca-wa/geoserver
 RUN apt-get update -y \
   && apt-get upgrade -y \
   && apt-get install -y wget libmagic-dev gcc binutils python3-dev libpq-dev \
@@ -14,8 +14,8 @@ ENV POETRY_VERSION=1.5.1
 RUN pip install "poetry==$POETRY_VERSION"
 
 #update add user
-RUN groupadd -r geoserver -g 1000
-RUN useradd -l -m -d /home/geoserver -u 1000 --gid 1000 -s /bin/bash -G geoserver geoserver
+RUN groupadd -r geoserver -g 9999
+RUN useradd -l -m -d /home/geoserver -u 9999 --gid 9999 -s /bin/bash -G geoserver geoserver
 
 # Install Python libs from pyproject.toml.
 WORKDIR /app
@@ -42,4 +42,4 @@ RUN chown -R geoserver:geoserver /app
 
 # Run the application as the geoserver user.
 USER geoserver
-CMD ./run_healthcheck
+CMD ["./run_healthcheck"]

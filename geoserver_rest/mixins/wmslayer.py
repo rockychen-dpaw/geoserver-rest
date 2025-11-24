@@ -1,6 +1,8 @@
 import logging
 import os
+import time
 import tempfile
+import traceback
 
 from ..exceptions import *
 from .. import settings
@@ -85,22 +87,40 @@ class WMSLayerMixin(object):
             return "{}/ows?service=WMS&version=1.1.1&request=GetCapabilities".format(self.geoserver_url)
 
     def get_wmscapabilities(self,version="1.3.0",outputfile=None):
-        res = self.get(self.wmscapabilities_url(version=version),headers=self.accept_header("xml"),timeout=settings.GETCAPABILITY_TIMEOUT)
+        while True:
+            attempts = 0
+            try:
+                attempts += 1
+                res = self.get(self.wmscapabilities_url(version=version),headers=self.accept_header("xml"),timeout=settings.GETCAPABILITY_TIMEOUT)
+                break
+            except Exception as ex:
+                if attempts > 10:
+                    raise
+                elif "InvalidChunkLength" in str(ex):
+                    time.sleep(1)
+                    continue
+                else:
+                    raise
+
         if outputfile:
             output = open(outputfile,'wb')
         else:
             output = tempfile.NamedTemporaryFile(
                 mode='wb',
-                prefix="gswmtscapabilities_",
+                prefix="gswmscapabilities_",
                 suffix=".xml",
                 delete = False, 
                 delete_on_close = False
             )
             outputfile = output.name
+
         try:
             for data in res.iter_content(chunk_size = 1024):
                 output.write(data)
-            logger.debug("WMTS capabilities was saved to {}".format(outputfile))
+            if attempts == 1:
+                logger.debug("WMS capabilities was saved to {}".format(outputfile))
+            else:
+                logger.debug("WMS capabilities was saved to {}, but tried {} times.".format(outputfile,attempts))
             return outputfile
         finally:
             output.close()

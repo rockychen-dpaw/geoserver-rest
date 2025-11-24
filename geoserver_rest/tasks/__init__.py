@@ -2,10 +2,12 @@ from .workspacetasks import *
 from .datastoretasks import *
 from .featuretypetasks import *
 from .wmsstoretasks import *
+from .coveragestoretasks import *
+from .coveragetasks import *
 from .wmslayertasks import *
 from .layergrouptasks import *
 from .mapservicetasks import *
-from .base import OutOfSyncTask
+from .base import OutOfSyncTask,Task
 
 
 class CheckGeoserverAlive(Task):
@@ -23,3 +25,10 @@ class CheckGeoserverAlive(Task):
     def _exec(self,geoserver):
         return geoserver.get_version(None)
     
+def createtasks_CheckGeoserverAlive(task,limit = 0):
+    """
+    a generator to return featuretypes tasks
+    """
+
+    yield CheckGeoserverAlive(post_actions_factory=task.post_actions_factory)
+

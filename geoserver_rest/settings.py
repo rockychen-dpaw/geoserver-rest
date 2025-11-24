@@ -34,7 +34,6 @@ WMTS_VERSION = os.environ.get("WMTS_VERSION","1.0.0")
 TEST_ZOOM = int(os.environ.get("TEST_ZOOM",12))
 TEST_FEATURES_COUNT = int(os.environ.get("TEST_FEATURES_COUNT",1))
 
-GEOSERVER_RESTART_TIMEOUT = int(os.environ.get("GEOSERVER_RESTART_TIMEOUT",1800))
 REQUEST_TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT",5))
 WMS_TIMEOUT = int(os.environ.get("WMS_TIMEOUT",600))
 WMTS_TIMEOUT = int(os.environ.get("WMTS_TIMEOUT",600))
@@ -54,16 +53,18 @@ HEALTHCHECK_DOP = int(os.environ.get("HEALTHCHECK_DOP",2))
 IGNORE_EMPTY_WORKSPACE = os.environ.get("IGNORE_EMPTY_WORKSPACE","false").lower() == "true"
 IGNORE_EMPTY_DATASTORE = os.environ.get("IGNORE_EMPTY_DATASTORE","false").lower() == "true"
 IGNORE_EMPTY_WMSSTORE = os.environ.get("IGNORE_EMPTY_WMSSTORE","false").lower() == "true"
+IGNORE_EMPTY_COVERAGESTORE = os.environ.get("IGNORE_EMPTY_COVERAGESTORE","false").lower() == "true"
 
-TASK_RETRIES = os.environ.get("TASK_RETRIES")
-if TASK_RETRIES:
-    TASK_RETRIES = [ t.rsplit(":",1) for t in TASK_RETRIES.split(",") if t.strip()]
-    for d in TASK_RETRIES:
+TASK_RETRY_INTERVAL = int(os.environ.get("TASK_RETRY_INTERVAL",300)) #seconds,
+TASK_ATTEMPTS = os.environ.get("TASK_ATTEMPTS") #name '__DEFAULT__' means the default attempts for all tasks
+if TASK_ATTEMPTS:
+    TASK_ATTEMPTS = [ t.rsplit(":",1) for t in TASK_ATTEMPTS.split(",") if t.strip()]
+    for d in TASK_ATTEMPTS:
         d[0] = d[0].strip()
         d[1] = int(d[1].strip())
-    TASK_RETRIES = dict(TASK_RETRIES)
+    TASK_ATTEMPTS = dict(TASK_ATTEMPTS)
 else:
-    TASK_RETRIES = {}
+    TASK_ATTEMPTS = {}
 
 REPORT_HOME = os.environ.get("REPORT_HOME") or "./reports"
 if os.path.exists(REPORT_HOME):

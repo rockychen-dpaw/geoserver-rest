@@ -2,6 +2,7 @@ import logging
 import urllib.parse
 import os
 import tempfile
+import traceback
 import xml.etree.ElementTree as ET
 
 from ..exceptions import *
@@ -148,13 +149,28 @@ class FeaturetypeMixin(object):
             return "{}/ows?service=WFS&version=1.0.0&request=GetCapabilities".format(self.geoserver_url)
 
     def get_wfscapabilities(self,version="2.0.0",outputfile=None):
+        while True:
+            attempts = 0
+            try:
+                attempts += 1
+                res = self.get(self.wfscapabilities_url(version=version),headers=self.accept_header("xml"),timeout=settings.GETCAPABILITY_TIMEOUT)
+                break
+            except Exception as ex:
+                if attempts > 10:
+                    raise
+                elif "InvalidChunkLength" in str(ex):
+                    time.sleep(1)
+                    continue
+                else:
+                    raise
         res = self.get(self.wfscapabilities_url(version=version),headers=self.accept_header("xml"),timeout=settings.GETCAPABILITY_TIMEOUT)
+
         if outputfile:
             output = open(outputfile,'wb')
         else:
             output = tempfile.NamedTemporaryFile(
                 mode='wb',
-                prefix="gswmtscapabilities_",
+                prefix="gswfscapabilities_",
                 suffix=".xml",
                 delete = False, 
                 delete_on_close = False
@@ -163,7 +179,10 @@ class FeaturetypeMixin(object):
         try:
             for data in res.iter_content(chunk_size = 1024):
                 output.write(data)
-            logger.debug("WMTS capabilities was saved to {}".format(outputfile))
+            if attempts == 1:
+                logger.debug("WFS capabilities was saved to {}".format(outputfile))
+            else:
+                logger.debug("WFS capabilities was saved to {}, but tried {} times.".format(outputfile,attempts))
             return outputfile
         finally:
             output.close()
