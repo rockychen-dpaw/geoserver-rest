@@ -34,7 +34,6 @@ class CoverageStoreMixin(object):
     
     def list_coveragestores(self,workspace):
         res = self.get(self.coveragestores_url(workspace),headers=self.accept_header("json"))
-        print("%%%%%%{} = {}".format(workspace,[str(s["name"]) for s in (res.json().get("coverageStores") or {}).get("coverageStore") or [] ]))
 
         return [str(s["name"]) for s in (res.json().get("coverageStores") or {}).get("coverageStore") or [] ]
     

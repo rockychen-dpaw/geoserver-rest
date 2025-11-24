@@ -330,8 +330,10 @@ def createtasks_TestWMSService4FeatureType(getFeatureTypeDetailTask,limit = 0):
                 getFeatureTypeDetailTask.workspace,
                 getFeatureTypeDetailTask.datastore,
                 getFeatureTypeDetailTask.featuretype,
+                srs,
                 layer_bbox,
                 style,
+                detailTask = getFeatureTypeDetailTask,
                 zoom = settings.TEST_ZOOM,
                 post_actions_factory=getFeatureTypeDetailTask.post_actions_factory
             )
@@ -377,84 +379,6 @@ def createtasks_TestWMTSService4FeatureType(getFeatureTypeDetailTask,limit = 0):
             post_actions_factory=getFeatureTypeDetailTask.post_actions_factory,
             gridset=gridset,
             zoom=zoom
-        )
-
-def createtasks_TestWMSService4Feature(getFeaturesTask,limit = 0):
-    """
-    a generator to return TestWMSService4FeatureType tasks
-    """
-    if not getFeaturesTask.enabled:
-        return 
-
-    if not getFeaturesTask.result or not getFeaturesTask.result.get("features"):
-        return
-    #get the intersection between layer_box and settings.MAX_BBOX
-    layer_bbox = getFeaturesTask.result["features"][0].get("bbox")
-    if not layer_bbox:
-        layer_bbox = utils.get_bbox((getFeaturesTask.result["features"][0].get("geometry") or {}).get("coordinates"))
-
-    if not layer_bbox or any(d is None for d in layer_bbox ):
-        return
-    srs = getFeaturesTask.featuredetails["latLonBoundingBox"]["crs"].upper()
-
-    yield TestWMSService4FeatureType(
-        getFeaturesTask.workspace,
-        getFeaturesTask.datastore,
-        getFeaturesTask.featuretype,
-        srs,
-        layer_bbox,
-        None,
-        detailTask = getFeaturesTask,
-        zoom = -1,
-        post_actions_factory=getFeaturesTask.post_actions_factory)
-
-    if getFeaturesTask.result.get("alternativeStyles"):
-        for style in getFeaturesTask.result["alternativeStyles"]:
-            yield TestWMSService4FeatureType(
-                getFeaturesTask.workspace,
-                getFeaturesTask.datastore,
-                getFeaturesTask.featuretype,
-                layer_bbox,
-                style,
-                zoom = -1,
-                post_actions_factory=getFeaturesTask.post_actions_factory
-            )
-
-
-def createtasks_TestWMTSService4Feature(getFeaturesTask,limit = 0):
-    """
-    a generator to return TestWMSService4FeatureType tasks
-    """
-    if not getFeaturesTask.gwcenabled:
-        return 
-
-    if not getFeaturesTask.result or not getFeaturesTask.result.get("features"):
-        return
-
-    #get the intersection between layer_box and settings.MAX_BBOX
-    layer_bbox = getFeaturesTask.result["features"][0].get("bbox")
-    if not layer_bbox:
-        layer_bbox = utils.get_bbox((getFeaturesTask.result["features"][0].get("geometry") or {}).get("coordinates"))
-    if not layer_bbox or any(d is None for d in layer_bbox ):
-        return
-
-    srs = getFeaturesTask.featuredetails["latLonBoundingBox"]["crs"].upper()
-    
-    for gridset in settings.GWC_GRIDSETS:
-        gridsetdata = next((gridsetdata  for gridsetdata in getFeaturesTask.featuredetails["gwc"]["gridSubsets"] if gridsetdata["gridSetName"] == gridset),None)
-        if not gridsetdata:
-            continue
-
-        yield TestWMTSService4FeatureType(
-            getFeaturesTask.workspace,
-            getFeaturesTask.datastore,
-            getFeaturesTask.featuretype,
-            srs,
-            layer_bbox,
-            None,
-            post_actions_factory=getFeaturesTask.post_actions_factory,
-            gridset=gridset,
-            zoom=-1
         )
 
 def createtasks_TestWMSService4WMSLayer(getWMSLayerDetailTask,limit = 0):
@@ -664,6 +588,8 @@ def createtasks_TestWMTSServiceFromWMSService(testWMSService,limit = 0):
     a generator to return TestWMSService4FeatureType tasks
     """
     if not testWMSService.detailTask.gwcenabled:
+        return
+    if testWMSService.is_failed:
         return
 
     for gridset in settings.GWC_GRIDSETS:

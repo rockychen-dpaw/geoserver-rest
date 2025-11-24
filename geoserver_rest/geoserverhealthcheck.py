@@ -139,9 +139,9 @@ class GeoserverHealthCheck(object):
             ]
         elif taskcls == CheckGeoserverAlive:
             return [
-                #self.create_tasks_from_previoustask_factory(createtasks_WFSGetCapabilities,0),
-                #self.create_tasks_from_previoustask_factory(createtasks_WMSGetCapabilities,0),
-                #self.create_tasks_from_previoustask_factory(createtasks_WMTSGetCapabilities,0),
+                self.create_tasks_from_previoustask_factory(createtasks_WFSGetCapabilities,0),
+                self.create_tasks_from_previoustask_factory(createtasks_WMSGetCapabilities,0),
+                self.create_tasks_from_previoustask_factory(createtasks_WMTSGetCapabilities,0),
                 self.create_tasks_from_previoustask_factory(createtasks_CoverageGetCapabilities,0),
                 self.create_tasks_from_previoustask_factory(createtasks_ListWorkspaces,0),
                 self._reportwriteaction,
@@ -149,10 +149,10 @@ class GeoserverHealthCheck(object):
             ]
         elif taskcls == ListWorkspaces:
             return [
-                #self.create_tasks_from_previoustask_factory(createtasks_ListDatastores,0),
+                self.create_tasks_from_previoustask_factory(createtasks_ListDatastores,0),
                 self.create_tasks_from_previoustask_factory(createtasks_ListCoverageStores,0),
-                #self.create_tasks_from_previoustask_factory(createtasks_ListWMSstores,0),
-                #self.create_tasks_from_previoustask_factory(createtasks_ListLayergroups,0),
+                self.create_tasks_from_previoustask_factory(createtasks_ListWMSstores,0),
+                self.create_tasks_from_previoustask_factory(createtasks_ListLayergroups,0),
                 self._reportwriteaction,
                 self._warningwriteaction
             ]
@@ -220,7 +220,7 @@ class GeoserverHealthCheck(object):
             return [
                 self.create_tasks_from_previoustask_factory(createtasks_GetFeatures),
                 #self.create_tasks_from_previoustask_factory(createtasks_GetFeatureCount),
-                #self.create_tasks_from_previoustask_factory(createtasks_TestWMSService4FeatureType),
+                self.create_tasks_from_previoustask_factory(createtasks_TestWMSService4FeatureType),
                 #self.create_tasks_from_previoustask_factory(createtasks_TestWMTSService4FeatureType),
                 self._reportwriteaction,
                 self._warningwriteaction,
@@ -253,8 +253,6 @@ class GeoserverHealthCheck(object):
             ]
         elif taskcls == GetFeatures:
             return [
-                self.create_tasks_from_previoustask_factory(createtasks_TestWMSService4Feature),
-                #self.create_tasks_from_previoustask_factory(createtasks_TestWMTSService4Feature),
                 self._reportwriteaction,
                 self._warningwriteaction,
             ]
