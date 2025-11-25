@@ -105,7 +105,7 @@ class Task(object):
             self.status,
             timezone.format(self.starttime,"%Y-%m-%d %H:%M:%S.%f") if self.starttime else "",
             timezone.format(self.endtime,"%Y-%m-%d %H:%M:%S.%f") if self.endtime else "",
-            timezone.format_timedelta(self.endtime - self.starttime,ignore_milliseconds=False) if self.starttime and self.endtime else "",
+            " {}".format(timezone.format_timedelta((self.endtime - self.starttime) if self.starttime and self.endtime else None,ignore_milliseconds=False)),
             self.exec_result
         )
 
@@ -136,7 +136,7 @@ class Task(object):
                 self.ERROR,
                 timezone.format(self.starttime,"%Y-%m-%d %H:%M:%S.%f") if self.starttime else "",
                 timezone.format(self.endtime,"%Y-%m-%d %H:%M:%S.%f") if self.endtime else "",
-                (self.endtime - self.starttime).total_seconds() if self.starttime and self.endtime else "",
+                " {}".format(timezone.format_timedelta((self.endtime - self.starttime) if self.starttime and self.endtime else None,ignore_milliseconds=False)),
                 msg
             )
 
@@ -152,7 +152,7 @@ class Task(object):
                     level,
                     timezone.format(self.starttime,"%Y-%m-%d %H:%M:%S.%f") if self.starttime else "",
                     timezone.format(self.endtime,"%Y-%m-%d %H:%M:%S.%f") if self.endtime else "",
-                    (self.endtime - self.starttime).total_seconds() if self.starttime and self.endtime else "",
+                    " {}".format(timezone.format_timedelta((self.endtime - self.starttime) if self.starttime and self.endtime else None,ignore_milliseconds=False)),
                     msg
                 )
 
@@ -166,7 +166,7 @@ class Task(object):
                     level,
                     timezone.format(self.starttime,"%Y-%m-%d %H:%M:%S.%f") if self.starttime else "",
                     timezone.format(self.endtime,"%Y-%m-%d %H:%M:%S.%f") if self.endtime else "",
-                    (self.endtime - self.starttime).total_seconds() if self.starttime and self.endtime else "",
+                    " {}".format(timezone.format_timedelta((self.endtime - self.starttime) if self.starttime and self.endtime else None,ignore_milliseconds=False)),
                     msg
                 )
 

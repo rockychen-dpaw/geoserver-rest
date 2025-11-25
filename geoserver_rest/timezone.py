@@ -47,7 +47,7 @@ def format(dt=None,pattern="%Y-%m-%d %H:%M:%S",timezone=None):
 
 def format_timedelta(td,ignore_milliseconds = True):
     if not td:
-        return "0 seconds"
+        return "00:00:00.000"
     days = td.days
     seconds = td.seconds
     hours = int(seconds / 3600)
@@ -55,6 +55,8 @@ def format_timedelta(td,ignore_milliseconds = True):
     minutes = int(seconds / 60)
     seconds = seconds % 60
 
+
+    """
     result = ("1 Day" if days == 1 else "{} Days".format(days))  if days > 0 else None
     result = "{}{}".format("{} ".format(result) if result else "",("1 Hour" if hours == 1 else "{} Hours".format(hours)))  if hours > 0 else result
     result = "{}{}".format("{} ".format(result) if result else "",("1 Minute" if minutes == 1 else "{} Minutes".format(minutes)))  if minutes > 0 else result
@@ -63,8 +65,12 @@ def format_timedelta(td,ignore_milliseconds = True):
     if not ignore_milliseconds:
         milliseconds = int(td.microseconds / 1000)
         result = "{}{}".format("{} ".format(result) if result else "",("1 Millisecond" if milliseconds == 1 else "{} Milliseconds".format(milliseconds)))  if milliseconds > 0 else result
-
-    return result
+    """
+    if ignore_milliseconds:
+        return "{0:0=2d}:{1:0=2d}:{2:0=2d}".format(hours,minutes,seconds)
+    else:
+        milliseconds = int(td.microseconds / 1000)
+        return "{0:0=2d}:{1:0=2d}:{2:0=2d}.{3:0=3d}".format(hours,minutes,seconds,milliseconds)
 
 def timestamp(dt=None):
     return  localtime(dt,timezone=timezone.utc).timestamp()
