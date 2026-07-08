@@ -19,7 +19,6 @@ if __name__ == '__main__':
 
     gwc_tiles_dir = os.environ.get("GWC_TILES_DIR")
     gwc_disk_size = os.environ.get("GWC_DISK_SIZE")
-    gwc_disk_shared = os.environ.get("GWC_DISK_SHARED","false").lower() == "true"
 
     gwc_emergencyclean_threadhold = float(os.environ.get("GWC_EMERGENCYCLEAN_THREADHOLD",0.9))
     if gwc_emergencyclean_threadhold <= 0.5 or gwc_emergencyclean_threadhold >= 0.98:
@@ -27,7 +26,13 @@ if __name__ == '__main__':
     #seconds
     
 
-    gwcmanage = gwcmanage.GWCManage(geoserver_name,geoserver_url,geoserver_user,geoserver_password,geoserver_ssl_verify,gwc_tiles_dir,gwc_disk_size,gwc_disk_shared,settings.GET_REQUEST_HEADERS("GEOSERVER_REQUEST_HEADERS"))
-    gwcmanage.check_gwc_cache(gwc_emergencyclean_threadhold)
+    gwcmanage = gwcmanage.GWCManage(geoserver_name,geoserver_url,geoserver_user,geoserver_password,geoserver_ssl_verify,gwc_tiles_dir,gwc_disk_size,settings.GET_REQUEST_HEADERS("GEOSERVER_REQUEST_HEADERS"))
+    cleaning_rounds = gwcmanage.check_gwc_cache(gwc_emergencyclean_threadhold)
+    if cleaning_rounds == 1:
+        print("Succeed analysed the disk usage of gwc layers and perform 1 round of emergency cleaning.")
+    elif cleaning_rounds > 1:
+        print("Succeed analysed the disk usage of gwc layers and perform {} rounds of emergency cleaning.".format(cleaning_rounds))
+    else:
+        print("Successfully analysed the disk usage of gwc layers.")
 
 

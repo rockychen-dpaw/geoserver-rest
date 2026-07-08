@@ -21,12 +21,12 @@ if __name__ == '__main__':
     if not gwc_tiles_dir:
         raise Exception("Missing gwc_tiles_dir")
     gwc_disk_size = os.environ.get("GWC_DISK_SIZE")
-    gwc_disk_shared = os.environ.get("GWC_DISK_SHARED","false").lower() == "true"
     #seconds
     gwc_cleantime = int(os.environ.get("GWC_CLEANTIME",0))
     
 
-    gwcmanage = gwcmanage.GWCManage(geoserver_name,geoserver_url,geoserver_user,geoserver_password,geoserver_ssl_verify,gwc_tiles_dir,gwc_disk_size,gwc_disk_shared,settings.GET_REQUEST_HEADERS("GEOSERVER_REQUEST_HEADERS"))
+    gwcmanage = gwcmanage.GWCManage(geoserver_name,geoserver_url,geoserver_user,geoserver_password,geoserver_ssl_verify,gwc_tiles_dir,gwc_disk_size,settings.GET_REQUEST_HEADERS("GEOSERVER_REQUEST_HEADERS"))
     gwcmanage.clean_gwc_cache(gwc_cleantime)
+    print("Succeed to clean the expired tiles of gwc layers.")
 
 
