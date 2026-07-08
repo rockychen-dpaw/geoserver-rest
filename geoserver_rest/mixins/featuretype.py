@@ -267,7 +267,7 @@ class FeaturetypeMixin(object):
                 parameters.get("escapeSql","false"),
                 parameters.get("geometry_column"),
                 parameters.get("geometry_type"),
-                parameters.get("srs","EPSG:4326")[5:]
+                parameters.get("geometry_srid",parameters.get("srs","EPSG:4326")[5:])
             )
         else:
             featuretype_data = FEATURETYPE_TEMPLATE.format(

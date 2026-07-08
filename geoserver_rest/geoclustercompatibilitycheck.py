@@ -15,12 +15,79 @@ from .geoserver import Geoserver
 from .exceptions import *
 from . import utils
 
+"""
+To perform the compatibility check, the following env var should be configured
+1. The geoserver related env vars
+    GEOSERVER_URL:                Required. The url of the tested geoserver
+    GEOSERVER_USER:               Required. The admin user of the geoserver
+    GEOSERVER_PASSWORD:           Required. The password of the admin user of the tested geoserver
+    GEOSERVER_SSL_VERIFY:         Optional. The flag to turn on/off ssl verify. Default is False
+    GEOSLAVES_URL:                Required. The url of the tested geoserver slaves
+    GEOSERVER_REQUEST_HEADERS:    Optional. The headers used to access the tested geoserver
+    GEOCLUSTER_SYNC_TIMEOUT:      Optional. The seconds to sync the settings among geoservers.
+
+2. The env vars to test vector layer:
+    SAMPLE_DATASET:               Required. The tested dataset used to create the vector layer in geoserver and upstream geoserver if required.
+    STYLE_FOLDER:                 Optional; If not specified, use the folder of the SAMPLE_DATAET if SAMPLE_DATASET is configured; otherwise is None.
+
+3. The env vars to test vector layer from postgis database
+    POSTGIS_HOST:                 Required.
+    POSTGIS_PORT:                 Required
+    POSTGIS_DATABASE:             Required
+    POSTGIS_SCHEMA:               Optional
+    POSTGIS_USER:                 Required
+    POSTGIS_PASSWORD:             Required
+    POSTGIS_TABLE:                Required
+    POSTGIS_GEOMETRY_COLUMN:      Required
+    POSTGIS_GEOMETRY_TYPE         Required. Can be MultiPolygon, Polygon, Line, MultiLine, Point and MultiPoint
+
+
+4. The env vars to test wms layer.
+    WMSSERVER_URL:                Required. The url of the upstream geoserver
+    WMSSERVER_USER:               Required. The admin user of the upstream geoserver
+    WMSSERVER_PASSWORD:           Required. The password of the admin user of the upstream wmsserver
+    WMSSERVER_SSL_VERIFY:         Optional. The flag to turn on/off ssl verify. Default is False
+    WMSSERVER_REQUEST_HEADERS:    Optional. The headers used to access the upstream geoserver
+
+5. The env vars to test wmts 
+    GRIDSUBSETS:                  Optional. Default is ["gda94","mercator"]
+
+Required Test data(in the folder ./data)
+1. The test vector layer with geopackage format.(only one is required.)
+2. The style file for the test vector layer.(can have multiple.). the style file name is [layername].[stylename].[styleversion].sld
+
+
+Resource created in tested geoserver during testing(All resource should be deleted except the uploaded dataset after testing if no exception is thrown)
+Workspace
+   featuretype4compatibilitycheck[timebasedsufix]
+        Datastore:
+            localds4compatibilitycheck
+                [basename of SAMPLE_DATASET]4compatibilitycheck:   layer name uses lower case. if layer name is duplcated, add a sufix [_seq] 
+            postgisds4compatibilitycheck
+                [POSTGIS_TABLE]4compatibilitycheck for table view: layer name uses lower case. if layer name is duplcated, add a sufix [_seq]
+                [POSTGIS_TABLE]4compatibilitycheck for sql view:   layer name uses lower case. if layer name is duplcated, add a sufix [_seq]
+        Style:
+            [layername]_[stylename]:            style name uses lower case
+       
+   wms4compatibilitycheck[timebasedsufix]
+
+Resource created in upstream geoserver during testing(All resource should be deleted except the uploaded dataset after testing if no exception is thrown)
+Workspace
+   featuretype4compatibilitycheck[timebasedsufix]
+        Datastore:
+            localds
+                [basename of SAMPLE_DATASET]:   layer name uses lower case. if layer name is duplcated, add a sufix [_seq] 
+        Style:
+            [layername]_[stylename]:            style name uses lower case
+       
+"""
+
 
 logger = logging.getLogger("geoserver_rest.geoservercompatibilitycheck")
 class GeoclusterCompatibilityCheck(GeoserverCompatibilityCheck):
     def __init__(self,geoserver_url,geoslaves_url,geoserver_user,geoserver_password,requestheaders=None,ssl_verify=True):
         super().__init__(geoserver_url,geoserver_user,geoserver_password,requestheaders=requestheaders,ssl_verify=ssl_verify)
-        self.geoslaves = [Geoserver(geoslave_url.strip(),geoserver_user,geoserver_password,headers=requestheaders) for geoslave_url in geoslaves_url.split(",") if geoslave_url.strip()]
+        self.geoslaves = [Geoserver(geoslave_url.strip(),geoserver_user,geoserver_password,headers=requestheaders,ssl_verify=ssl_verify) for geoslave_url in geoslaves_url.split(",") if geoslave_url.strip()]
         self.sync_timeout = int(os.environ.get("GEOCLUSTER_SYNC_TIMEOUT",30))
         self.check_interval = 10
 
@@ -809,9 +876,9 @@ class GeoclusterCompatibilityCheck(GeoserverCompatibilityCheck):
         try:
             slavetile = geoslave.get_tile(wsname,layername)
             if filecmp.cmp(slavetile,tile):
-                return  [True,"The tile of the layer({1}.{2}) in geocluster slave server({0}) matches the tile in master server".format(geoslave.geoserver_url,wsname,layername)]
+                return  [True,"The original tile of the layer({1}.{2}) in geocluster slave server({0}) matches the original tile in master server".format(geoslave.geoserver_url,wsname,layername)]
             else:
-                return  [False,"The tile of the layer({1}.{2}) in geocluster slave server({0}) doesn't match the tile in master server".format(geoslave.geoserver_url,wsname,layername)]
+                return  [False,"The original tile of the layer({1}.{2}) in geocluster slave server({0}) doesn't match the original tile in master server".format(geoslave.geoserver_url,wsname,layername)]
         finally:
             utils.remove_file(slavetile)
 
@@ -852,13 +919,13 @@ class GeoclusterCompatibilityCheck(GeoserverCompatibilityCheck):
         try:
             slavetile = geoslave.get_tile(wsname,layername)
             if filecmp.cmp(slavetile,tile):
-                return  [True,"The cached tile of the layer({1}.{2}) in geocluster slave server({0}) matches the tile in master server".format(geoslave.geoserver_url,wsname,layername)]
+                return  [True,"The cached tile of the layer({1}.{2}) in geocluster slave server({0}) matches the tile in master server before clear".format(geoslave.geoserver_url,wsname,layername)]
             else:
-                return  [False,"The cached tile of the layer({1}.{2}) in geocluster slave server({0}) doesn't match the tile in master server".format(geoslave.geoserver_url,wsname,layername)]
+                return  [False,"The cached tile of the layer({1}.{2}) in geocluster slave server({0}) doesn't match the tile in master server before clear".format(geoslave.geoserver_url,wsname,layername)]
         finally:
             utils.remove_file(slavetile)
 
-    def post_empty_gwccache1(self,wsname,layername,tile):
+    def post_empty_gwccache(self,wsname,layername,tile):
         return self._check_geoslave(self._post_empty_gwccache,wsname,layername,tile)
 
     def _post_empty_gwccache(self,geoslave,starttime,wsname,layername,tile):

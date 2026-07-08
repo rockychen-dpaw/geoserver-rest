@@ -68,8 +68,8 @@ class GeoserverHealthCheck(object):
 
             if not os.path.exists(self._reports_home):
                 os.makedirs(self._reports_home,mode=0o755)
-
         return self._reports_home
+
     @property
     def report_dir(self):
         if not self._report_dir:

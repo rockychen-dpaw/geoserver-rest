@@ -28,6 +28,70 @@ jinja_env = jinja2.Environment(
     loader=jinja2.FileSystemLoader([settings.BASE_DIR]),
     autoescape=jinja2.select_autoescape()
 )
+"""
+To perform the compatibility check, the following env var should be configured
+1. The geoserver related env vars
+    GEOSERVER_URL:                Required. The url of the tested geoserver
+    GEOSERVER_USER:               Required. The admin user of the geoserver
+    GEOSERVER_PASSWORD:           Required. The password of the admin user of the tested geoserver
+    GEOSERVER_SSL_VERIFY:         Optional. The flag to turn on/off ssl verify. Default is False
+    GEOSERVER_REQUEST_HEADERS:    Optional. The headers used to access the tested geoserver
+
+2. The env vars to test vector layer:
+    SAMPLE_DATASET:               Required. The tested dataset used to create the vector layer in geoserver and upstream geoserver if required.
+    STYLE_FOLDER:                 Optional; If not specified, use the folder of the SAMPLE_DATAET if SAMPLE_DATASET is configured; otherwise is None.
+
+3. The env vars to test vector layer from postgis database
+    POSTGIS_HOST:                 Required.
+    POSTGIS_PORT:                 Required
+    POSTGIS_DATABASE:             Required
+    POSTGIS_SCHEMA:               Optional
+    POSTGIS_USER:                 Required
+    POSTGIS_PASSWORD:             Required
+    POSTGIS_TABLE:                Required
+    POSTGIS_GEOMETRY_COLUMN:      Required
+    POSTGIS_GEOMETRY_TYPE         Required. Can be MultiPolygon, Polygon, Line, MultiLine, Point and MultiPoint
+
+
+4. The env vars to test wms layer.
+    WMSSERVER_URL:                Required. The url of the upstream geoserver
+    WMSSERVER_USER:               Required. The admin user of the upstream geoserver
+    WMSSERVER_PASSWORD:           Required. The password of the admin user of the upstream wmsserver
+    WMSSERVER_SSL_VERIFY:         Optional. The flag to turn on/off ssl verify. Default is False
+    WMSSERVER_REQUEST_HEADERS:    Optional. The headers used to access the upstream geoserver
+
+5. The env vars to test wmts 
+    GRIDSUBSETS:                  Optional. Default is ["gda94","mercator"]
+
+Required Test data(in the folder ./data)
+1. The test vector layer with geopackage format.(only one is required.)
+2. The style file for the test vector layer.(can have multiple.). the style file name is [layername].[stylename].[styleversion].sld
+
+
+Resource created in tested geoserver during testing(All resource should be deleted except the uploaded dataset after testing if no exception is thrown)
+Workspace
+   featuretype4compatibilitycheck[timebasedsufix]
+        Datastore:
+            localds4compatibilitycheck
+                [basename of SAMPLE_DATASET]4compatibilitycheck:   layer name uses lower case. if layer name is duplcated, add a sufix [_seq] 
+            postgisds4compatibilitycheck
+                [POSTGIS_TABLE]4compatibilitycheck for table view: layer name uses lower case. if layer name is duplcated, add a sufix [_seq]
+                [POSTGIS_TABLE]4compatibilitycheck for sql view:   layer name uses lower case. if layer name is duplcated, add a sufix [_seq]
+        Style:
+            [layername]_[stylename]:            style name uses lower case
+       
+   wms4compatibilitycheck[timebasedsufix]
+
+Resource created in upstream geoserver during testing(All resource should be deleted except the uploaded dataset after testing if no exception is thrown)
+Workspace
+   featuretype4compatibilitycheck[timebasedsufix]
+        Datastore:
+            localds
+                [basename of SAMPLE_DATASET]:   layer name uses lower case. if layer name is duplcated, add a sufix [_seq] 
+        Style:
+            [layername]_[stylename]:            style name uses lower case
+       
+"""
 
 class GeoserverCompatibilityCheck(object):
     report_file = None
@@ -37,7 +101,8 @@ class GeoserverCompatibilityCheck(object):
     _finished_tasks = None
     metadata = None
     basesufix = "4compatibilitycheck"
-    sufix = "{}{}".format(int(datetime.utcnow().timestamp()) % 864000,basesufix)
+    #sufix = "{}{}".format(int(datetime.utcnow().timestamp()) % 864000,basesufix)
+    sufix = basesufix
     _layers = {}
     wmsserver = None
     
@@ -128,30 +193,6 @@ class GeoserverCompatibilityCheck(object):
         else:
             resources[keys[-1]] = [value]
 
-    def reset_env(self):
-        for wsname in self.geoserver.list_workspaces():
-            if not wsname.endswith(self.basesufix):
-                continue
-            self.geoserver.delete_workspace(wsname,recurse=True)
-            if self.geoserver.has_workspace(wsname):
-                raise Exception("Failed to delete workspace '{}'".format(wsname))
-
-        for usergroup in self.list_usergroups():
-            if not usergroup.endswith(self.basesufix):
-                continue
-
-            self.geoserver.delete_usergroup(usergroup)
-            if self.geoserver.has_usergroup(usergroup):
-                raise Exception("Failed to delete user group '{}'".format(usergroup))
-
-        for user,userenabled in self.list_users():
-            if not user.endwith(self.basesufix):
-                continue
-
-            self.geoserver.delete_user(user)
-            if self.geoserver.has_user(user):
-                raise Exception("Failed to delete user '{}'".format(user))
-
     def create_workspace(self):
         """
         Create workspace,
@@ -224,6 +265,7 @@ class GeoserverCompatibilityCheck(object):
             else:
                 self._update_checklist("datastore",operation,[False,"Failed to create the datastore '{}.{}' from local dataset({})".format(wsname,storename,dataset)])
         except Exception as ex:
+            traceback.print_exc()
             self._update_checklist("datastore",operation,[False,"Failed to create the datastore '{}.{}' from local dataset({}). {}".format(wsname,storename,dataset,ex)])
 
     def post_create_localdatastore(self,wsname,storename,dataset):
@@ -338,6 +380,12 @@ class GeoserverCompatibilityCheck(object):
 
     def create_style(self):
         #find the style folder and layer name
+        stylefolder = self.style_folder
+        if not stylefolder:
+            #not style found
+            return
+
+        allstyles = []
         for wsname,wsdata in self._resources.get("workspaces",{}).items():
             for storename,storedata in wsdata.get("datastores",{}).items():
                 if storename == "__parameters__":
@@ -347,45 +395,43 @@ class GeoserverCompatibilityCheck(object):
                         continue
                     layerparameters = layerdata["__parameters__"]
                     nativename = layerparameters["nativeName"]
-                stylefolder = self.style_folder
-                if not stylefolder:
-                    #not style found
-                    return
         
-                #find the style 
-                styles = []
-                for f in os.listdir(stylefolder):
-                    basename,fileext = os.path.splitext(f)
-                    if fileext != ".sld":
-                        continue
-                    prefix = "{}.".format(nativename)
-                    if not basename.startswith(prefix):
-                        continue
-                    try:
-                        stylename,styleversion = basename[len(prefix):].split(".",1)
-                    except ValueError as ex:
-                        stylename = layername[len(prefix):]
-                        styleversion = "1.0.0"
-                    except:
-                        continue
-                    styles.append(["{}_{}".format(layername,stylename),styleversion,f])
+                    #find all styles for this layer
+                    styles = []
+                    for f in os.listdir(stylefolder):
+                        basename,fileext = os.path.splitext(f)
+                        if fileext != ".sld":
+                            continue
+                        prefix = "{}.".format(nativename)
+                        if not basename.startswith(prefix):
+                            continue
+                        try:
+                            stylename,styleversion = basename[len(prefix):].split(".",1)
+                        except ValueError as ex:
+                            stylename = layername[len(prefix):]
+                            styleversion = "1.0.0"
+                        except:
+                            continue
+                        styles.append(["{}_{}".format(layername,stylename.lower()),styleversion,f])
         
-                #sort the style, always put the style 'default' as the first item
-                styles.sort(key=lambda s: "0{}".format(s[0])  if s[0].endswith("default") else s[0])
+                    #sort the style, always put the style 'default' as the first item
+                    styles.sort(key=lambda s: "0{}".format(s[0])  if s[0].endswith("default") else s[0])
+                    allstyles.append(styles)
         
-                for stylename,styleversion,f in styles:
-                    try:
-                        with open(os.path.join(stylefolder,f),'r') as fin:
-                            styledata = fin.read()
-                            self.geoserver.update_style(wsname,stylename,styleversion,styledata)
-                        if self.geoserver.has_style(wsname,stylename) :
-                            self._add_container_resource("workspaces",wsname,"styles",layername,stylename,parameters={"version":styleversion,"style":styledata})
-                            self._update_checklist("style","create",[True,"Succeed to create the style '{}.{}'".format(wsname,stylename)])
-                            self._update_checklist("style","create",self.post_create_style(wsname,stylename,styleversion,styledata))
-                        else:
-                            self._update_checklist("style","create",[False,"Failed to create the style '{}.{}'".format(wsname,stylename)])
-                    except Exception as ex:
-                        self._update_checklist("style","create",[False,"Failed to create the style '{}.{}'. {}".format(wsname,stylename,ex)])
+                for styles in allstyles:
+                    for stylename,styleversion,f in styles:
+                        try:
+                            with open(os.path.join(stylefolder,f),'r') as fin:
+                                styledata = fin.read()
+                                self.geoserver.update_style(wsname,stylename,styleversion,styledata)
+                            if self.geoserver.has_style(wsname,stylename) :
+                                self._add_container_resource("workspaces",wsname,"styles",layername,stylename,parameters={"version":styleversion,"style":styledata})
+                                self._update_checklist("style","create",[True,"Succeed to create the style '{}.{}'".format(wsname,stylename)])
+                                self._update_checklist("style","create",self.post_create_style(wsname,stylename,styleversion,styledata))
+                            else:
+                                self._update_checklist("style","create",[False,"Failed to create the style '{}.{}'".format(wsname,stylename)])
+                        except Exception as ex:
+                            self._update_checklist("style","create",[False,"Failed to create the style '{}.{}'. {}".format(wsname,stylename,ex)])
 
     def post_create_style(self,wsname,stylename,styleversion,styledata):
         return None
@@ -491,7 +537,7 @@ class GeoserverCompatibilityCheck(object):
                     continue
                 dataset = storeparameters
                 nativename = os.path.splitext(os.path.basename(dataset))[0]
-                layername = "{}{}".format(nativename,self.sufix)
+                layername = "{}{}".format(nativename.lower(),self.sufix)
                 key = (wsname,layername)
                 if key in self._layers:
                     layername = "{}_{}".format(layername,self._layers[key])
@@ -526,68 +572,76 @@ class GeoserverCompatibilityCheck(object):
 
         """
         operation = "Publish featuretype from postgis datastore"
-        parameters = {}
         layers = []
-        wsname = "featuretype{}".format(self.sufix)
-        if os.environ.get("POSTGIS_TABLE"):
-            nativename = os.environ["POSTGIS_TABLE"]
-            layername = "{}{}".format(nativename,self.sufix)
-            key = (wsname,layername)
-            if key in self._layers:
-                layername = "{}_{}".format(layername,self._layers[key])
-                self._layers[key] += 1
-            else:
-                self._layers[key] = 1
-            layers.append((
-                ("featuretype{}".format(self.sufix),"postgisds{}".format(self.sufix),layername),
-                {
-                    "srs":"EPSG:4326",
-                    "title":layername,
-                    "abstract":layername,
-                    "keywords":["test"],
-                    "nativeName":nativename
-                }
-            ))
-        if all(os.environ.get(key) is not None  for key in ("POSTGIS_GEOMETRY_COLUMN","POSTGIS_GEOMETRY_TYPE","POSTGIS_TABLE")):
-            nativename = os.environ["POSTGIS_TABLE"]
-            layername = "{}{}".format(nativename,self.sufix)
-            key = (wsname,layername)
-            if key in self._layers:
-                layername = "{}_{}".format(layername,self._layers[key])
-                self._layers[key] += 1
-            else:
-                self._layers[key] = 1
-            layers.append((
-                ("featuretype{}".format(self.sufix),"postgisds{}".format(self.sufix),layername),
-                {
-                    "srs":"EPSG:4326",
-                    "viewsql":"select * from {}".format(os.environ["POSTGIS_TABLE"]),
-                    "geometry_column":os.environ["POSTGIS_GEOMETRY_COLUMN"],
-                    "geometry_type":os.environ["POSTGIS_GEOMETRY_TYPE"],
-                    "title":layername,
-                    "abstract":layername,
-                    "keywords":["test"],
-                    "nativeName":nativename
-                }
-            ))
-            for layer,parameters in layers:
-                try:
-                    wsname,storename,layername = layer
-                    self.geoserver.publish_featuretype(wsname,storename,layername,parameters,create=True)
-                    if self.geoserver.has_featuretype(wsname,layername,storename=storename):
-                        featuretypedata = self.geoserver.get_featuretype(wsname,layername,storename)
-                        for k in ("title","abstract","keywords"):
-                            v = parameters[k]
-                            if self.geoserver.get_featuretype_field(featuretypedata,k) != (v if isinstance(v,list) else str(v)):
-                                raise Exception("The field({1}) of the datastore({0}) should be {3} instead of {2}".format(layername,k,v,self.geoserver.get_datastore_field(featuretypedata,k)))
-    
-                        self._add_container_resource("workspaces",wsname,"datastores",storename,layername,parameters=parameters)
-                        self._update_checklist("featuretype",operation,[True,"Succeed to publish the featuretype '{}.{}.{}' from postgis {}".format(wsname,storename,layername,"view" if parameters.get("viewsql") else "table" )])
-                        self._update_checklist("featuretype",operation,self.post_publish_featuretype_from_postgisdatastore(wsname,storename,layername,parameters))
+        for wsname,wsdata in self._resources.get("workspaces",{}).items():
+            for storename,storedata in wsdata.get("datastores",{}).items():
+                if storename == "__parameters__":
+                    continue
+                storeparameters = storedata["__parameters__"]
+                if isinstance(storeparameters,str):
+                    #is a local store
+                    continue
+
+                if os.environ.get("POSTGIS_TABLE"):
+                    nativename = os.environ["POSTGIS_TABLE"]
+                    layername = "{}{}".format(nativename.lower(),self.sufix)
+                    key = (wsname,layername)
+                    if key in self._layers:
+                        layername = "{}_{}".format(layername,self._layers[key])
+                        self._layers[key] += 1
                     else:
-                        self._update_checklist("featuretype",operation,[False,"Failed to publish the featuretype '{}.{}.{}' from postgis {}".format(wsname,storename,layername,"view" if parameters.get("viewsql") else "table")])
-                except Exception as ex:
-                    self._update_checklist("featuretype",operation,[False,"Failed to publish the featuretype '{}.{}.{}' from postgis {}. {}".format(wsname,storename,layername,"view" if parameters.get("viewsql") else "table",ex)])
+                        self._layers[key] = 1
+                    layers.append((
+                        (wsname,storename,layername),
+                        {
+                            "srs":"EPSG:4326",
+                            "title":layername,
+                            "abstract":layername,
+                            "keywords":["test"],
+                            "nativeName":nativename
+                        }
+                    ))
+                if all(os.environ.get(key) is not None  for key in ("POSTGIS_GEOMETRY_COLUMN","POSTGIS_GEOMETRY_TYPE","POSTGIS_TABLE")):
+                    nativename = os.environ["POSTGIS_TABLE"]
+                    layername = "{}{}".format(nativename.lower(),self.sufix)
+                    key = (wsname,layername)
+                    if key in self._layers:
+                        layername = "{}_{}".format(layername,self._layers[key])
+                        self._layers[key] += 1
+                    else:
+                        self._layers[key] = 1
+                    layers.append((
+                        (wsname,storename,layername),
+                        {
+                            "srs":"EPSG:4326",
+                            "viewsql":"select * from {}".format(os.environ["POSTGIS_TABLE"]),
+                            "geometry_column":os.environ["POSTGIS_GEOMETRY_COLUMN"],
+                            "geometry_type":os.environ["POSTGIS_GEOMETRY_TYPE"],
+                            "geometry_srid":os.environ.get("POSTGIS_GEOMETRY_SRID","4326"),
+                            "title":layername,
+                            "abstract":layername,
+                            "keywords":["test"],
+                            "nativeName":nativename
+                        }
+                    ))
+        for layer,parameters in layers:
+            try:
+                wsname,storename,layername = layer
+                self.geoserver.publish_featuretype(wsname,storename,layername,parameters,create=True)
+                if self.geoserver.has_featuretype(wsname,layername,storename=storename):
+                    featuretypedata = self.geoserver.get_featuretype(wsname,layername,storename)
+                    for k in ("title","abstract","keywords"):
+                        v = parameters[k]
+                        if self.geoserver.get_featuretype_field(featuretypedata,k) != (v if isinstance(v,list) else str(v)):
+                            raise Exception("The field({1}) of the datastore({0}) should be {3} instead of {2}".format(layername,k,v,self.geoserver.get_datastore_field(featuretypedata,k)))
+
+                    self._add_container_resource("workspaces",wsname,"datastores",storename,layername,parameters=parameters)
+                    self._update_checklist("featuretype",operation,[True,"Succeed to publish the featuretype '{}.{}.{}' from postgis {}".format(wsname,storename,layername,"view" if parameters.get("viewsql") else "table" )])
+                    self._update_checklist("featuretype",operation,self.post_publish_featuretype_from_postgisdatastore(wsname,storename,layername,parameters))
+                else:
+                    self._update_checklist("featuretype",operation,[False,"Failed to publish the featuretype '{}.{}.{}' from postgis {}".format(wsname,storename,layername,"view" if parameters.get("viewsql") else "table")])
+            except Exception as ex:
+                self._update_checklist("featuretype",operation,[False,"Failed to publish the featuretype '{}.{}.{}' from postgis {}. {}".format(wsname,storename,layername,"view" if parameters.get("viewsql") else "table",ex)])
 
     def post_publish_featuretype_from_postgisdatastore(self,wsname,storename,layername,parameters):
         return None
@@ -663,6 +717,163 @@ class GeoserverCompatibilityCheck(object):
     def post_update_featuretype_styles(self,wsname,layername,defaultstyle,styles):
         return None
 
+    cqlfilter_test_data = {
+        "dbca_districts_public":{
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson": 17,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid=38": 1,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid<>38": 16,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid>=38": 14,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid>38": 13,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid<38": 3,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid<=38": 4,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid between 35 and 38": 4,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district='ALBANY'": 1,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district in ('ALBANY','PERTH HILLS')": 2,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district like '%25KIMBERLEY'": 2,
+            #"{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district like '%25kimberley'": 0,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district ilike '%25kimberley'": 2,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district > 'PERTH'": 7,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=\"district\"='PERTH HILLS'": 1,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=BBOX(wkb_geometry, 113.10603251, -24.73349092, 116.49853543, -21.39394374)": 3,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=disjoint(wkb_geometry, POLYGON((113.10603251 -24.73349092, 113.10603251 -21.39394374, 116.49853543 -21.39394374,116.49853543 -24.73349092,%20 113.10603251 -24.73349092)))": 14,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=intersects(wkb_geometry, POLYGON((113.10603251 -24.73349092, 113.10603251 -21.39394374, 116.49853543 -21.39394374,116.49853543 -24.73349092,%20 113.10603251 -24.73349092)))": 3,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=contains(wkb_geometry,point(125.33203 -27.72949))": 1,            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=crosses(wkb_geometry,linestring(125.33203 -27.72949,124.23340 -21.88477))": 2,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=within(wkb_geometry,polygon((116.98242 -22.36816,117.24609 -33.17871,130.34180 -32.21191,130.12207 -22.67578,116.98242 -22.36816)))": 1,
+            "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=overlaps(wkb_geometry,polygon((116.98242 -22.36816,117.24609 -33.17871,130.34180 -32.21191,130.12207 -22.67578,116.98242 -22.36816)))": 5,
+
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson": 17,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid=38": 1,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid<>38": 16,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid>=38": 14,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid>38": 13,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid<38": 3,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid<=38": 4,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid between 35 and 38": 4,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district='ALBANY'": 1,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district in ('ALBANY','PERTH HILLS')": 2,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district like '%25KIMBERLEY'": 2,
+            #"{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district like '%25kimberley'": 0,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district ilike '%25kimberley'": 2,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district > 'PERTH'": 7,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=\"district\"='PERTH HILLS'": 1,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=BBOX(wkb_geometry, 113.10603251, -24.73349092, 116.49853543, -21.39394374)": 3,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=disjoint(wkb_geometry, POLYGON((113.10603251 -24.73349092, 113.10603251 -21.39394374, 116.49853543 -21.39394374,116.49853543 -24.73349092,%20 113.10603251 -24.73349092)))": 14,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=intersects(wkb_geometry, POLYGON((113.10603251 -24.73349092, 113.10603251 -21.39394374, 116.49853543 -21.39394374,116.49853543 -24.73349092,%20 113.10603251 -24.73349092)))": 3,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=contains(wkb_geometry,point(125.33203 -27.72949))": 1,            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=crosses(wkb_geometry,linestring(125.33203 -27.72949,124.23340 -21.88477))": 2,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=within(wkb_geometry,polygon((116.98242 -22.36816,117.24609 -33.17871,130.34180 -32.21191,130.12207 -22.67578,116.98242 -22.36816)))": 1,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=overlaps(wkb_geometry,polygon((116.98242 -22.36816,117.24609 -33.17871,130.34180 -32.21191,130.12207 -22.67578,116.98242 -22.36816)))": 5,
+
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson": 17,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid=38": 1,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid<>38": 16,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid>=38": 14,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid>38": 13,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid<38": 3,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid<=38": 4,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid between 35 and 38": 4,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district='ALBANY'": 1,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district in ('ALBANY','PERTH HILLS')": 2,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district like '%25KIMBERLEY'": 2,
+            #"{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district like '%25kimberley'": 0,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district ilike '%25kimberley'": 2,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district > 'PERTH'": 7,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=\"district\"='PERTH HILLS'": 1,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=BBOX(wkb_geometry, 113.10603251, -24.73349092, 116.49853543, -21.39394374)": 3,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=disjoint(wkb_geometry, POLYGON((113.10603251 -24.73349092, 113.10603251 -21.39394374, 116.49853543 -21.39394374,116.49853543 -24.73349092,%20 113.10603251 -24.73349092)))": 14,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=intersects(wkb_geometry, POLYGON((113.10603251 -24.73349092, 113.10603251 -21.39394374, 116.49853543 -21.39394374,116.49853543 -24.73349092,%20 113.10603251 -24.73349092)))": 3,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=contains(wkb_geometry,point(125.33203 -27.72949))": 1,            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=crosses(wkb_geometry,linestring(125.33203 -27.72949,124.23340 -21.88477))": 2,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=within(wkb_geometry,polygon((116.98242 -22.36816,117.24609 -33.17871,130.34180 -32.21191,130.12207 -22.67578,116.98242 -22.36816)))": 1,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=overlaps(wkb_geometry,polygon((116.98242 -22.36816,117.24609 -33.17871,130.34180 -32.21191,130.12207 -22.67578,116.98242 -22.36816)))": 5,
+
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson": 17,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid=38": 1,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid<>38": 16,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid>=38": 14,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid>38": 13,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid<38": 3,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid<=38": 4,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid between 35 and 38": 4,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district='ALBANY'": 1,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district in ('ALBANY','PERTH HILLS')": 2,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district like '%25KIMBERLEY'": 2,
+            #"{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district like '%25kimberley'": 0,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district ilike '%25kimberley'": 2,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district > 'PERTH'": 7,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=\"district\"='PERTH HILLS'": 1,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=BBOX(wkb_geometry,-24.73349092,113.10603251,-21.39394374,116.49853543)": 3,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=disjoint(wkb_geometry, POLYGON((-24.73349092 113.10603251,-21.39394374 113.10603251,-21.39394374 116.49853543,-24.73349092 116.49853543,-24.73349092 113.10603251)))": 14,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=intersects(wkb_geometry, POLYGON((-24.73349092 113.10603251,-21.39394374 113.10603251,-21.39394374 116.49853543,-24.73349092 116.49853543,-24.73349092 113.10603251)))": 3,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=contains(wkb_geometry,point(-27.72949 125.33203))": 1,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=crosses(wkb_geometry,linestring(-27.72949 125.33203,-21.88477 124.23340))": 2,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=within(wkb_geometry,polygon((-22.36816 116.98242,-33.17871 117.24609,-32.21191 130.34180,-22.67578 130.12207,-22.36816 116.98242)))": 1,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=overlaps(wkb_geometry,polygon((-22.36816 116.98242,-33.17871 117.24609,-32.21191 130.34180,-22.67578 130.12207,-22.36816 116.98242)))": 5,
+
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson": 17,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid=38": 1,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid<>38": 16,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid>=38": 14,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid>38": 13,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid<38": 3,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid<=38": 4,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=objectid between 35 and 38": 4,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district='ALBANY'": 1,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district in ('ALBANY','PERTH HILLS')": 2,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district like '%25KIMBERLEY'": 2,
+            #"{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district like '%25kimberley'": 0,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district ilike '%25kimberley'": 2,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=district > 'PERTH'": 7,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=\"district\"='PERTH HILLS'": 1,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=BBOX(wkb_geometry,-24.73349092,113.10603251,-21.39394374,116.49853543)": 3,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=disjoint(wkb_geometry, POLYGON((-24.73349092 113.10603251,-21.39394374 113.10603251,-21.39394374 116.49853543,-24.73349092 116.49853543,-24.73349092 113.10603251)))": 14,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=intersects(wkb_geometry, POLYGON((-24.73349092 113.10603251,-21.39394374 113.10603251,-21.39394374 116.49853543,-24.73349092 116.49853543,-24.73349092 113.10603251)))": 3,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=contains(wkb_geometry,point(-27.72949 125.33203))": 1,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=crosses(wkb_geometry,linestring(-27.72949 125.33203,-21.88477 124.23340))": 2,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=within(wkb_geometry,polygon((-22.36816 116.98242,-33.17871 117.24609,-32.21191 130.34180,-22.67578 130.12207,-22.36816 116.98242)))": 1,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=overlaps(wkb_geometry,polygon((-22.36816 116.98242,-33.17871 117.24609,-32.21191 130.34180,-22.67578 130.12207,-22.36816 116.98242)))": 5,
+        }
+
+    }
+    def test_cql_filter(self):
+        for wsname,wsdata in self._resources.get("workspaces",{}).items():
+            for storename,storedata in wsdata.get("datastores",{}).items():
+                if storename == "__parameters__":
+                    continue
+
+                storeparameters = storedata["__parameters__"]
+                if isinstance(storeparameters,str):
+                    #is a local store
+                    operation = "Test CQL Filter For Geopackage Layer"
+                else:
+                    operation = "Test CQL Filter For Postgis Layer"
+
+                for layername,layerdata in storedata.items():
+                    if layername == "__parameters__":
+                        continue
+
+                    testcases = {}
+                    for k,v in self.cqlfilter_test_data.items():
+                        if k in layername.lower():
+                            testcases = v
+                            break
+                    for urlpattern, featurecount in testcases.items():
+                        url = urlpattern.format(self.geoserver.geoserver_url,wsname,layername)
+                        try:
+                            data = None
+                            res = None
+                            res = self.geoserver.get(url)
+                            data = res.json()
+                            if data.get("totalFeatures",0) != featurecount:
+                                self._update_checklist("featuretype",operation,[False,"{}.{}: Failed to test the cql filter({}), expected totalFeatures '{}', but got '{}' ".format(wsname,layername,url,featurecount,data.get("totalFeatures",0))])
+                            else:
+                                self._update_checklist("featuretype",operation,[True,"{}.{}: Succeed to test the cql filter({}), got totalFeatures '{}'".format(wsname,layername,url,featurecount)])
+                        except Exception as ex:
+                            if res:
+                                self._update_checklist("featuretype",operation,[False,"{}.{}: Failed to test the cql filter({}).{}:{} ".format(wsname,layername,url,res.status_code,res.text)])
+                            else:
+                                self._update_checklist("featuretype",operation,[False,"{}.{}: Failed to test the cql filter({}).{}:{} ".format(wsname,layername,url,ex.__class__.__name__,str(ex))])
+
+
+
     def delete_featuretype(self):
         operation = "delete"
         for wsname,wsdata in self._resources.get("workspaces",{}).items():
@@ -709,7 +920,7 @@ class GeoserverCompatibilityCheck(object):
             raise Exception("Failed to update the layer access rule({1}) in wms server({0})".format(self.wmsserver.geoserver_url,access_rules))
 
         #create datastore
-        storename = "localds{}".format(self.basesufix)
+        storename = "localds{}".format(self.sufix)
         #find the layer name via publishing the f
         self.wmsserver.upload_dataset(wsname,storename,dataset)
         if not self.wmsserver.has_datastore(wsname,storename):
@@ -717,7 +928,7 @@ class GeoserverCompatibilityCheck(object):
 
         #publish featuretype
         nativename = os.path.splitext(os.path.basename(dataset))[0]
-        layername = nativename
+        layername = "{}{}".format(nativename.lower(),self.basesufix)
         parameters = {"nativeName":nativename,"title":nativename,"abstract":"for testing","keywords":["test"]}
         self.wmsserver.publish_featuretype(wsname,storename,layername,parameters,create=True)
         if not self.wmsserver.has_featuretype(wsname,layername,storename):
@@ -741,7 +952,7 @@ class GeoserverCompatibilityCheck(object):
                     styleversion = "1.0.0"
                 except:
                     continue
-                styles.append(["{}_{}".format(layername,stylename),styleversion,f])
+                styles.append(["{}_{}".format(layername,stylename.lower()),styleversion,f])
         #sort the style, always put the style 'default' as the first item
         styles.sort(key=lambda s: "0{}".format(s[0])  if s[0].endswith("default") else s[0])
         for stylename,styleversion,f in styles:
@@ -872,13 +1083,14 @@ class GeoserverCompatibilityCheck(object):
         wsname = "featuretype{}".format(self.basesufix)
 
         dataset = os.environ.get("SAMPLE_DATASET")
-        nativename = os.path.splitext(os.path.basename(dataset))[0]
+        basename = os.path.splitext(os.path.basename(dataset))[0]
+        nativename = "{}{}".format(basename,self.basesufix)
 
         for workspace,workspacedata in self._resources.get("workspaces",{}).items():
             for wmsstorename,wmsstoredata in workspacedata.get("wmsstores",{}).items():
                 if wmsstorename == "__parameters__":
                     continue
-                layername = "{}{}".format(nativename,self.sufix)
+                layername = "{}{}".format(basename,self.sufix)
                 key = (workspace,layername)
                 if key in self._layers:
                     layername = "{}_{}".format(layername,self._layers[key])
@@ -1325,7 +1537,7 @@ class GeoserverCompatibilityCheck(object):
                     tile_restore_afterclear = None
                     
                     try:
-                        #update the expireCache to 10 secods
+                        #update the expireCache to 10 hours
                         wmtslayerparameters["expireCache"] = 36000
                         wmtslayerparameters["expireClients"] = 36000
                         self.geoserver.update_gwclayer(wsname,layername,wmtslayerparameters)
@@ -1918,6 +2130,8 @@ class GeoserverCompatibilityCheck(object):
 
             self.update_style()
 
+            self.test_cql_filter()
+
             self.create_resources_in_wmsserver()
             self.create_wmsstore()
             self.update_wmsstore()
@@ -1954,8 +2168,8 @@ class GeoserverCompatibilityCheck(object):
             self.delete_usergroup()
             
         finally:
-            self.reset_checking_env()
-            self.delete_resources_in_wmsserver()
+            #self.reset_checking_env()
+            #self.delete_resources_in_wmsserver()
             pass
             
 
@@ -1980,7 +2194,7 @@ Failed Geoserver Compatibility Check Tasks:
 )))
 
 
-            
+           
 if __name__ == '__main__':
     geoserver_url = os.environ["GEOSERVER_URL"]
     geoserver_user = os.environ.get("GEOSERVER_USER")

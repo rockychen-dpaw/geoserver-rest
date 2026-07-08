@@ -1,14 +1,14 @@
-import pytz
+from zoneinfo import ZoneInfo
 import os
 
 from datetime import datetime,timezone
 
 UTC = timezone.utc
 
-TIMEZONE = pytz.timezone(os.environ.get("TZ","Australia/Perth"))
+TIMEZONE = ZoneInfo(os.environ.get("TZ","Australia/Perth"))
 
 def get_timezone(tz):
-    return pytz.timezone(tz) if tz else get_current_timezone()
+    return ZoneInfo(tz) if tz else get_current_timezone()
 
 def get_current_timezone():
     return TIMEZONE
@@ -32,7 +32,6 @@ def localtime(dt=None,timezone=None):
 
     dt = dt.astimezone(timezone)
     if hasattr(timezone, 'normalize'):
-        # This method is available for pytz time zones.
         dt = timezone.normalize(dt)
     return dt
 
@@ -79,10 +78,10 @@ def make_aware(dt, timezone=None):
     if timezone is None:
         timezone = get_current_timezone()
     if isinstance(timezone,str):
-        timezone = pytz.timezone(timezone)
+        timezone = ZoneInfo(timezone)
 
     if hasattr(timezone, 'localize'):
-        # This method is available for pytz time zones.
+        # This method is available for time zones.
         return timezone.localize(dt, is_dst=None)
     else:
         # Check that we won't overwrite the timezone of an aware datetime.

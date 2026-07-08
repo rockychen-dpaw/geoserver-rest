@@ -11,6 +11,8 @@ from . import settings
 
 logger = logging.getLogger(__name__)
 
+requests.packages.urllib3.disable_warnings()
+
 class GeoserverUtils(object):
     @staticmethod
     def encode_xmltext(text):

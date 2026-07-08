@@ -305,7 +305,7 @@ class GWCMixin(object):
         """
         Return a json object if exists; otherwise return None
         """
-        res = self.get(self.gwclayer_url(workspace,layername) , headers=self.accept_header("json"),error_handler=self._handle_gwcresponse_error)
+        res = self.get(self.gwclayer_url(workspace,layername,f="json") , headers=self.accept_header("json"),error_handler=self._handle_gwcresponse_error)
         return res.json().get("GeoServerLayer")
             
     def delete_gwclayer(self,workspace,layername):

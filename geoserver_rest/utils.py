@@ -2,6 +2,8 @@ import re
 import traceback
 import os
 
+from datetime import timedelta
+
 
 def has_samedata(datas1,datas2):
     """
@@ -115,5 +117,43 @@ def remove_file(f):
     except Exception as ex:
         pass
                 
+def format_timedelta(td,unit="s"):
+    days = 0
+    hours = 0
+    minutes = 0
+    seconds = 0
+    if isinstance(td,timedelta):
+        days = td.days
+        seconds = td.seconds
+        hours = int(seconds / (60 * 60))
+        seconds = seconds % (60 * 60)
+        minutes = int(seconds / 60)
+        seconds = seconds % 60
+    else:
+        if unit == "d":
+            days = td
+        elif unit == "h":
+            days = int(td / 24)
+            hours = td % 24
+        elif unit == "m":
+            days = int(td / (24 * 60))
+            minutes = td % (24 * 60)
+            hours = int(minutes / 60)
+            minutes = minutes % 60
+        elif unit == "s":
+            days = int(td / (24 * 60 * 60))
+            seconds = td % (24 * 60 * 60)
+            hours = int(seconds / (60 * 60))
+            seconds = seconds % (60 * 60)
+            minutes = int(seconds / 60)
+            seconds = seconds % 60
+
+
+    days = "" if days == 0 else "{}D".format(days)
+    hours = "" if hours == 0 else "{}H".format(hours)
+    minutes = "" if minutes == 0 else "{}M".format(minutes)
+    seconds = "" if seconds == 0 else "{}S".format(seconds)
+
+    return "".join(d for d in [days,hours,minutes,seconds] if d)
                 
 
