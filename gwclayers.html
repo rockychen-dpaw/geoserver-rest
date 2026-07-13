@@ -2,34 +2,42 @@
 <head>
     <title>GWC Layer Disk Usage for geoserver '{{geoserver}}'</title>
     <style>
-    table {
-    	border-collapse: collapse;
+    #cleanstatus  table {
+        font-size:16px;
+        font-style:italic;
+        color:#682424;
+        white-space: pre-wrap;
+        width: 80%
+    }
+
+    #layerstatus table {
+        border-collapse: collapse;
         font-family: Tahoma, Geneva, sans-serif;
     }
-    table td {
-    	padding: 15px;
+    #layerstatus table td {
+        padding: 15px;
     }
-    table thead th {
-    	background-color: #54585d;
-    	color: #ffffff;
-    	font-weight: bold;
-    	font-size: 13px;
-    	border: 1px solid #54585d;
+    #layerstatus table thead th {
+        background-color: #54585d;
+        color: #ffffff;
+        font-weight: bold;
+        font-size: 13px;
+        border: 1px solid #54585d;
     }
-    table thead th {
-    	border: 1px solid #dddfe1;
+    #layerstatus thead th {
+        border: 1px solid #dddfe1;
     }
-    table tbody td {
-    	color: #636363;
-    	border: 1px solid #dddfe1;
+    #layerstatus tbody td {
+        color: #636363;
+        border: 1px solid #dddfe1;
     }
-    table tbody tr {
-    	background-color: #f9fafb;
+    #layerstatus table tbody tr {
+        background-color: #f9fafb;
     }
-    table tbody tr:nth-child(odd) {
-    	background-color: #ffffff;
+    #layerstatus table tbody tr:nth-child(odd) {
+        background-color: #ffffff;
     }
-    table caption {
+    #layerstatus table caption {
       font-weight: bold;
       font-size: 16px;
       color: #636363;
@@ -38,10 +46,26 @@
     </style>
 </head>
 <body>
+    <div id="cleanstatus">
     <table>
-        <caption>GWC Disk Usage for geoserver({{geoserver}})<br>
-            <span id="totaldiskusage" style="font-size:14px;font-style:italic;color:#682424;white-space: pre-wrap;">Disk Size: {{diskusage.disksize}}    Used Disk Size: {{diskusage.cachesize}}    Used Percentage: {{diskusage.percent}}    Check Time: {{diskusage.checktime}}</span>
+        <caption>
+            <span style="font-weight: bold;font-size:20px;color: #636363;font-style:normal">GWC Disk Usage for geoserver({{geoserver}})</span>
+            <span>Disk Size: {{diskusage.disksize}}  Used Disk Size: {{diskusage.usedsize}}  Used Percentage: {{diskusage.percent}}</span>
         </caption>
+        <tr>
+            <td>Clean Start Time: {{managementstatus.clean_starttime}}</td>
+            <td>Clean End Time: {{managementstatus.clean_endtime}} </td>
+            <td>Clean Message: {{managementstatus.clean_message}}</td>
+        </td></tr>
+        <tr>
+            <td>Check Start Time: {{managementstatus.check_starttime}} </td>
+            <td>Check End Time: {{managementstatus.check_endtime}}</td>
+            <td>Check Message: {{managementstatus.check_message}}</td> 
+        </td></tr>
+    </table>
+    </div>
+    <div id="layerstatus">
+    <table>
        <thead>
         <tr>
             <th rowspan=2>Workspace</th>
@@ -64,15 +88,16 @@
             <td>{{layer.name[0]}}</td>
             <td>{{layer.name[1]}}</td>
             <td>{{layer.expireCache_human}}</td>
-            <td style="text-align:right">{{layer.cache_size_human}}</td>
-            <td>{{layer.cache_starttime}}</td>
-            <td>{{layer.clean_starttime}}</td>
-            <td>{{layer.clean_endtime}}</td>
-            <td>{{layer.clean_processtime}}</td>
-            <td>{{layer.clean_emergency}}</td>
-            <td style="white-space: pre-wrap;">{{layer.clean_message}}</td>
+            <td style="text-align:right">{{layer._managementstatus_.tiles_totalsize_human}}</td>
+            <td>{{layer._managementstatus_.cache_starttime}}</td>
+            <td>{{layer._managementstatus_.clean_starttime}}</td>
+            <td>{{layer._managementstatus_.clean_endtime}}</td>
+            <td>{{layer._managementstatus_.clean_processtime}}</td>
+            <td>{{layer._managementstatus_.clean_emergency}}</td>
+            <td style="white-space: pre-line;">{{layer.clean_message}}</td>
         </tr>
         {%- endfor %}
     </table>
+    </div>
 </body>
 </html>
