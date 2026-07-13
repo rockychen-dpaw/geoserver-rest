@@ -4,7 +4,7 @@ LABEL org.opencontainers.image.authors=asi@dbca.wa.gov.au
 
 RUN apt-get update -y \
   && apt-get upgrade -y \
-  && apt-get install -y passwd  \
+  && apt-get install -y passwd \
   && rm -rf /var/lib/apt/lists/* \
   && pip install --upgrade pip
 
@@ -32,16 +32,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 COPY reports.html notify_email.html gwclayers.html ./
 COPY geoserver_rest ./geoserver_rest
-
-RUN echo "#!/bin/bash \n\
-if [[ \"\${GEOSERVER_URLS}\" == \"\" ]]; then \n\
-    cd /app && python -m geoserver_rest.geoserverhealthcheck \n\
-else \n\
-    cd /app && python -m geoserver_rest.geoservershealthcheck \n\
-fi \n\
-" > healthcheck.sh
-
-RUN chmod 555 healthcheck.sh
+COPY bin ./bin
 
 RUN chown -R geoserver:geoserver /app
 
@@ -63,4 +54,4 @@ COPY --from=build-stage --chown=app:app /app /app
 WORKDIR /app
 # Run the application as the non-root user.
 USER geoserver
-CMD ["./healthcheck.sh"]
+CMD ["./bin/healthcheck.sh"]
