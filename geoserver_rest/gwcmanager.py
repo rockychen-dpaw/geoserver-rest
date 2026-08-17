@@ -261,7 +261,7 @@ class GWCManager(object):
 
         return diskusage
 
-    def manage(self,clean_interval=864000,check_increments=1048576,max_cleantime=0,clean_threshold=0.8,emergencyclean_threshold=0.9):
+    def manage(self,clean_interval=10,check_increments=1048576,max_cleantime=0,clean_threshold=0.8,emergencyclean_threshold=0.9):
         """
         Manage the cache of  gwc layers with the following steps
         1. Execute the uncompleted clean batch if have
