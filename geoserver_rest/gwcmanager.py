@@ -449,7 +449,7 @@ class GWCManager(object):
                     gwcmanagementstatus[layer["name"][0]] = {}
                 gwcmanagementstatus[layer["name"][0]][layer["name"][1]] = managementstatus
 
-            #save gwcmanagementstatus
+            #save gwcmanagementstatus to json file
             try:
                 with open(self.gwcmanagementstatusfile,"w") as f:
                     if settings.DEBUG:
