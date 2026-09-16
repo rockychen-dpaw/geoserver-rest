@@ -145,7 +145,7 @@ class GWCManager(object):
                 #has cached tiles
                 if expireCache <= 0 :
                     #expireCache is disabled
-                    layer["clean_message"] = "'expireCache' is 0, skip.'".format(layer["name"][0],layer["name"][1])
+                    managementstatus["clean_message"] = "'expireCache' is 0, skip.'".format(layer["name"][0],layer["name"][1])
                     return False
 
                 if emergency:
@@ -155,7 +155,7 @@ class GWCManager(object):
                     delete2time = now - timedelta(minutes=minutes)
                     if cache_starttime and cache_starttime >= delete2time:
                         #no tiles to delete in this round, but still have tiles to delete in the next round.
-                        layer["clean_message"] = "No tiles are required to delete on the round of emergency clean, skip."
+                        managementstatus["clean_message"] = "No tiles are required to delete on this round of emergency clean, skip."
                         return True
                 else:
                     if expireCache > 86400:
@@ -170,7 +170,7 @@ class GWCManager(object):
     
                     if cache_starttime and (now - cache_starttime).total_seconds() <= minutes * 60:
                         #cache_starttime is later than the planned clean time, no need to clean in the normal clean
-                        layer["clean_message"] = "The cache start time is later than the clean time, skip."
+                        managementstatus["clean_message"] = "The cache start time is later than the clean time, skip."
                         return False
 
                 cmd = "find {} -type f -mmin +{} -delete".format(layer_tile_dir,minutes)
@@ -183,12 +183,12 @@ class GWCManager(object):
                 return True
             elif expireCache > 0 :
                 #don't have cached tiles, but expireCache is enabled
-                layer["clean_message"] = "No tiles are cached , skip."
+                managementstatus["clean_message"] = "No tiles are cached , skip."
                 managementstatus["cache_starttime"] = timezone.format(now,pattern="%Y-%m-%d %H:%M:%S")
                 return False
             else:
                 #don't have cached tiles, but expireCache is disabled
-                layer["clean_message"] = "'expireCache' is 0 and no tiles are cached, skip.'".format(layer["name"][0],layer["name"][1])
+                managementstatus["clean_message"] = "'expireCache' is 0 and no tiles are cached, skip.'".format(layer["name"][0],layer["name"][1])
                 if "cache_starttime" in managementstatus:
                     del managementstatus["cache_starttime"]
 
@@ -300,6 +300,8 @@ class GWCManager(object):
                         #done
                         raise RunOutofTimeException()
                 self._managementstatus["clean_endtime"] = timezone.format(timezone.localtime(),pattern="%Y-%m-%d %H:%M:%S")
+                self._managementstatus["clean_succeed"] = True
+                self._managementstatus["clean_message"] = "Succeed"
     
             #normal clean if required
             cleanbatchid = None
