@@ -145,7 +145,7 @@ class GWCManager(object):
                 #has cached tiles
                 if expireCache <= 0 :
                     #expireCache is disabled
-                    managementstatus["clean_message"] = "'expireCache' is 0, skip.'".format(layer["name"][0],layer["name"][1])
+                    managementstatus["clean_message"] = "'expireCache' is 0, skip.".format(layer["name"][0],layer["name"][1])
                     return False
 
                 if emergency:
@@ -188,7 +188,7 @@ class GWCManager(object):
                 return False
             else:
                 #don't have cached tiles, but expireCache is disabled
-                managementstatus["clean_message"] = "'expireCache' is 0 and no tiles are cached, skip.'".format(layer["name"][0],layer["name"][1])
+                managementstatus["clean_message"] = "'expireCache' is 0 and no tiles are cached, skip.".format(layer["name"][0],layer["name"][1])
                 if "cache_starttime" in managementstatus:
                     del managementstatus["cache_starttime"]
 
