@@ -387,7 +387,8 @@ class GWCManager(object):
                         logger.debug("Already cleaned {}0%(time based) of tiles from all gwc layers. stop emergency cleaning.".format(cleanround))
                         break
 
-            self._managementstatus["clean_endtime"] = timezone.format(timezone.localtime(),pattern="%Y-%m-%d %H:%M:%S")
+            if cleaned:
+                self._managementstatus["clean_endtime"] = timezone.format(timezone.localtime(),pattern="%Y-%m-%d %H:%M:%S")
 
             #find the tiles_totalsize for  each layer if cleaned or not checked before or tiles_totalsize reach the check increments
             diskinfo_after_clean = self.get_diskinfo() if cleaned else diskinfo_before_clean
