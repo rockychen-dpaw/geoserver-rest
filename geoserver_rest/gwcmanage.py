@@ -1,4 +1,5 @@
 import os
+import socket
 from datetime import datetime
 
 from . import settings
@@ -13,9 +14,14 @@ if __name__ == '__main__':
     geoserver_user = os.environ["GEOSERVER_USER"]
     geoserver_password = os.environ["GEOSERVER_PASSWORD"]
     geoserver_ssl_verify = os.environ.get("GEOSERVER_SSL_VERIFY","true").lower() == "true"
-   
+ 
     if not geoserver_name:
         geoserver_name = utils.get_domain(geoserver_url)
+
+    if geoserver_name.lower() in ("localhost","127.0.0.1"):
+        hostname = socket.gethostname()
+        if hostname:
+            geoserver_name = hostname
 
     gwc_tiles_dir = os.environ.get("GWC_TILES_DIR")
     if not gwc_tiles_dir:
