@@ -379,6 +379,77 @@ class GWCMixin(object):
     def get_tile_count(self,gridset,bbox,zoom):
         return GridsetUtil.get_instance(self.get_gridset(gridset)["srs"]).get_tile_count(bbox,zoom)
 
+    def tiles(self,gridset,bbox,zoom):
+        return GridsetUtil.get_instance(self.get_gridset(gridset)["srs"]).tiles(bbox,zoom)
+
+    def generate_wmsurls4testing(self,gridset:str,workspace:str,layername:str,bbox:list,tilecounts:list,filename:str,relativeurl:bool = False,format="image/jpeg"):
+        """
+        tiles: list of (zoomlevel,expect tiles,maximum tiles)
+        total number of urls should be the sum of expect tiles.
+        if can't get enough tiles for specific level, the next zoom level will return more tiles up to cache up the missing tiles or reach the mximum tiles
+        """
+        count = 0
+        required_tiles = 0
+        srs = self.get_gridset(gridset)["srs"]
+        zoomlevels = len(self.get_gridset(gridset)["resolutions"])
+        tilecounts.sort(key=lambda o:o[0])
+        for level in range(tilecounts[-1][0] + 1,zoomlevels,1):
+            tilecounts.append((level,0,0))
+        with open(filename,'w') as f:
+            for zoom,expect_tiles,maximum_tiles in tilecounts:
+                required_tiles += expect_tiles
+                tiles4level = 0
+                if required_tiles == 0:
+                    break
+                for tile in self.tiles(gridset,bbox,zoom):
+                    tilebbox = self.get_tilebbox(zoom,tile[0],tile[1],gridset=gridset)
+                    url = self.map_url(workspace,layername,tilebbox,srs=srs,format=format)
+                    if relativeurl:
+                        url = url[len(self.geoserver_url):]
+                    f.write("{}\n".format(url))
+                    tiles4level += 1
+                    required_tiles -= 1
+                    if required_tiles == 0:
+                        #already generated enough tiles
+                        break
+                    if maximum_tiles > 0 and tiles4level >= maximum_tiles:
+                        #already generated maximum_tiles
+                        break
+
+    def generate_wmtsurls4testing(self,gridset:str,workspace:str,layername:str,bbox:list,tilecounts:list,filename:str,relativeurl:bool = False,format="image/jpeg"):
+        """
+        tiles: list of (zoomlevel,expect tiles,maximum tiles)
+        total number of urls should be the sum of expect tiles.
+        if can't get enough tiles for specific level, the next zoom level will return more tiles up to cache up the missing tiles or reach the mximum tiles
+        """
+        count = 0
+        required_tiles = 0
+        srs = self.get_gridset(gridset)["srs"]
+        zoomlevels = len(self.get_gridset(gridset)["resolutions"])
+        tilecounts.sort(key=lambda o:o[0])
+        for level in range(tilecounts[-1][0] + 1,zoomlevels,1):
+            tilecounts.append((level,0,0))
+        with open(filename,'w') as f:
+            for zoom,expect_tiles,maximum_tiles in tilecounts:
+                required_tiles += expect_tiles
+                tiles4level = 0
+                if required_tiles == 0:
+                    break
+                for tile in self.tiles(gridset,bbox,zoom):
+                    url = self.tile_url(workspace,layername,zoom,tile[1],tile[0],gridset=gridset,format=format)
+                    if relativeurl:
+                        url = url[len(self.geoserver_url):]
+                    f.write("{}\n".format(url))
+                    tiles4level += 1
+                    required_tiles -= 1
+                    if required_tiles == 0:
+                        #already generated enough tiles
+                        break
+                    if maximum_tiles > 0 and tiles4level >= maximum_tiles:
+                        #already generated maximum_tiles
+                        break
+
+
     def get_tile(self,workspace,layername,zoom=None,row=None,column=None,gridset=settings.GWC_GRIDSET,format="image/jpeg",style=None,version=settings.WMTS_VERSION,outputfile=None):
         """
         if zoom,row or column is None, will return a tile conver the whole layer
