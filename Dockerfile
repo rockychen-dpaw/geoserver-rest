@@ -4,9 +4,37 @@ LABEL org.opencontainers.image.authors=asi@dbca.wa.gov.au
 
 RUN apt-get update -y \
   && apt-get upgrade -y \
-  && apt-get install -y passwd \
+  && apt-get install -y passwd curl\
   && rm -rf /var/lib/apt/lists/* \
   && pip install --upgrade pip
+
+# Docker automatically populates these arguments during multi-platform builds
+ARG TARGETARCH
+ARG SUPERCRONIC_VERSION=v0.2.49
+ARG SUPERCRONIC_SHA1SUM
+ARG SUPERCRONIC
+
+# Map Docker TARGETARCH to Supercronic binary suffix
+RUN set -x \
+    && if [ "$TARGETARCH" = "amd64" ]; then \
+        SUPERCRONIC=supercronic-linux-amd64; \
+        SUPERCRONIC_SHA1SUM=a53ae236602c7338aba3fbaff40bda6300eae3b9fedb8261eb06cfe3724430c1; \
+       elif [ "$TARGETARCH" = "arm64" ]; then \
+        SUPERCRONIC=supercronic-linux-arm64; \
+        SUPERCRONIC_SHA1SUM=02aa0cb229ba09050cba6638059dadb9eedc2276632ea43d6a57a2f8c1629dd5; \
+       elif [ "$TARGETARCH" = "arm" ]; then \
+        SUPERCRONIC=supercronic-linux-arm; \
+        SUPERCRONIC_SHA1SUM=d961592036e9f87a75e18cf4a7fcb78d1caa5732f57ada3a952906d2d3a4076c; \
+       elif [ "$TARGETARCH" = "386" ]; then \
+        SUPERCRONIC=supercronic-linux-386; \
+        SUPERCRONIC_SHA1SUM=db302b8ce2be799937780f1baa41ebdf2bd67aa394ee1b2ae0e1e19c3117f6b8; \
+       else \
+        echo "Unsupported architecture: $TARGETARCH" && exit 1; \
+       fi \
+    && curl -fsSLO "https://github.com/aptible/supercronic/releases/download/${SUPERCRONIC_VERSION}/$SUPERCRONIC" \
+    && echo "${SUPERCRONIC_SHA1SUM}  ${SUPERCRONIC}" | sha256sum -c  \
+    && mv "./${SUPERCRONIC}" "/usr/bin/supercronic" \
+    && chmod +x /usr/bin/supercronic 
 
 #update add user
 RUN groupadd -r geoserver -g 9999
@@ -44,6 +72,10 @@ LABEL org.opencontainers.image.authors=asi@dbca.wa.gov.au
 # Copy the user & usergroup
 COPY --from=build-stage /etc/group /etc/
 COPY --from=build-stage /etc/passwd /etc/
+
+# Copy supercronic
+COPY --from=build-stage /usr/bin/supercronic /usr/bin
+
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
