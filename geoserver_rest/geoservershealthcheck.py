@@ -127,7 +127,7 @@ if __name__ == '__main__':
     elif len(geoserver_ssl_verifies) != len(geoserver_ssl_verifies):
         raise Exception("The count({1}) of geoserver ssl verifies does not match with the count({0}) of geoserver urls.".format(len(geoserver_urls),len(geoserver_ssl_verifies)))
 
-    geoserver_data_dirs = os.environ.get("GEOSERVER_DATA_DIRS") or os.environ.get("GEOSERVER_DATA_DIR")
+    geoserver_data_dirs = os.environ.get("GEOSERVER_DATA_DIRS") or os.environ.get("GEOSERVER_DATA_DIR") or ""
     geoserver_data_dirs = [u.strip() for u in geoserver_data_dirs.split(",") if u.strip()]
 
     geoserver_catalog_hosts = os.environ.get("GEOSERVER_CATALOG_HOSTS") or os.environ.get("GEOSERVER_CATALOG_HOST") or "localhost"
@@ -136,20 +136,22 @@ if __name__ == '__main__':
     geoserver_catalog_ports = os.environ.get("GEOSERVER_CATALOG_PORTS") or os.environ.get("GEOSERVER_CATALOG_PORT") or "5432"
     geoserver_catalog_ports = [int(u.strip()) for u in geoserver_catalog_ports.split(",") if u.strip()]
 
-    geoserver_catalog_dbnames = os.environ.get("GEOSERVER_CATALOG_DBS") or os.environ.get("GEOSERVER_CATALOG_DB")
+    geoserver_catalog_dbnames = os.environ.get("GEOSERVER_CATALOG_DBS") or os.environ.get("GEOSERVER_CATALOG_DB") or ""
     geoserver_catalog_dbnames = [u.strip() for u in geoserver_catalog_dbnames.split(",") if u.strip()]
 
-    geoserver_catalog_users = os.environ.get("GEOSERVER_CATALOG_USERS") or os.environ.get("GEOSERVER_CATALOG_USER")
+    geoserver_catalog_users = os.environ.get("GEOSERVER_CATALOG_USERS") or os.environ.get("GEOSERVER_CATALOG_USER") or ""
     geoserver_catalog_users = [u.strip() for u in geoserver_catalog_users.split(",") if u.strip()]
 
-    geoserver_catalog_passwds = os.environ.get("GEOSERVER_CATALOG_PASSWORDS") or os.environ.get("GEOSERVER_CATALOG_PASSWORD")
+    geoserver_catalog_passwds = os.environ.get("GEOSERVER_CATALOG_PASSWORDS") or os.environ.get("GEOSERVER_CATALOG_PASSWORD") or ""
     geoserver_catalog_passwds = [u.strip() for u in geoserver_catalog_passwds.split(",") if u.strip()]
 
     geoserver_catalog_sslmodes = os.environ.get("GEOSERVER_CATALOG_SSLMODES")or os.environ.get("GEOSERVER_CATALOG_SSLMODE") or "prefer"
     geoserver_catalog_sslmodes = [u.strip() for u in geoserver_catalog_sslmodes.split(",") if u.strip()]
 
 
-    if len(geoserver_data_dirs) == 1:
+    if len(geoserver_data_dirs) == 0:
+        geoservers = [(geoserver_urls[i][0],geoserver_urls[i][1],geoserver_users[i],geoserver_passwords[i],geoserver_ssl_verifies[i],None,None,None,None,None,None,None) for i in range(1,len(geoserver_urls),1)]
+    elif len(geoserver_data_dirs) == 1:
         geoservers = [(geoserver_urls[i][0],geoserver_urls[i][1],geoserver_users[i],geoserver_passwords[i],geoserver_ssl_verifies[i],None,None,None,None,None,None,None) for i in range(1,len(geoserver_urls),1)]
         geoservers.insert(0,(geoserver_urls[0][0],geoserver_urls[0][1],geoserver_users[0],geoserver_passwords[0],geoserver_ssl_verifies[0],geoserver_data_dirs[0],geoserver_catalog_hosts[0],geoserver_catalog_ports[0],geoserver_catalog_dbnames[0],geoserver_catalog_users[0],geoserver_catalog_passwds[0],geoserver_catalog_sslmodes[0]))
     else:
