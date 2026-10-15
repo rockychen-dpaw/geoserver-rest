@@ -76,7 +76,7 @@ class TaskRunner(object):
                 break
             else:
                 retry += 1
-                logger.info("{} : All tasks in the queue 'tasks' have been finished, wait {} seconds before the {}th time to retry the failed tasks".format(self.name,settings.TASK_RETRY_INTERVAL,retry))
+                logger.info("{} : All tasks in the queue 'tasks' have been finished, wait {} seconds and retry the failed tasks the {}th time".format(self.name,settings.TASK_RETRY_INTERVAL,retry))
                 time.sleep(settings.TASK_RETRY_INTERVAL)
                 count = self.readd_retrytasks()
                 logger.info("{} : The {}th time to retry the failed {} tasks now".format(self.name,retry,count))
