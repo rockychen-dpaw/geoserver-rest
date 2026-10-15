@@ -1,5 +1,6 @@
 import os
 import socket
+import logging
 from datetime import datetime
 
 from . import settings
@@ -7,8 +8,11 @@ from . import loggingconfig
 from . import utils
 from . import gwcmanager
 
+logger = logging.getLogger("geoserver_rest.gwcmanage")
 
 if __name__ == '__main__':
+    logger.info("\n\n====================================================")
+    logger.info("Begin to perform geowebcache cleaning")
     geoserver_name = os.environ["GEOSERVER_NAME"]
     geoserver_url = os.environ["GEOSERVER_URL"]
     geoserver_user = os.environ["GEOSERVER_USER"]
@@ -53,27 +57,27 @@ if __name__ == '__main__':
     )
     if clean_result[0]:
         if clean_result[1] < 0:
-            print("Performed a tile cleaning task, but can't find how much disk space was released.")
+            logger.info("Performed a tile cleaning task, but can't find how much disk space was released.")
         elif clean_result[1] <= 1024:
-            print("Performed a tile cleaning task,{}K space was released".format(clean_result[1]))
+            logger.info("Performed a tile cleaning task,{}K space was released".format(clean_result[1]))
         elif clean_result[1] <= 1048576:
-            print("Performed a tile cleaning task,{}M space was released".format(clean_result[1] / 1024))
+            logger.info("Performed a tile cleaning task,{}M space was released".format(clean_result[1] / 1024))
         else:
-            print("Performed a tile cleaning task,{}G space was released".format(clean_result[1] / 1048576))
+            logger.info("Performed a tile cleaning task,{}G space was released".format(clean_result[1] / 1048576))
     else:
-        print("Tile cleaning task was skipped.")
+        logger.info("Tile cleaning task was skipped.")
 
     if check_result[0]:
         if not check_result[2]:
-            print("Performed a GWC layers' cache detecting task, but can't find how much disk space the gwc layers used.")
+            logger.info("Performed a GWC layers' cache detecting task, but can't find how much disk space the gwc layers used.")
         elif check_result[2] <= 1024:
-            print("Performed a GWC layers' cache detecting task, {}K space was occupied by gwc layers, Used {}%".format(check_result[2],check_result[3] * 100))
+            logger.info("Performed a GWC layers' cache detecting task, {}K space was occupied by gwc layers, Used {}%".format(check_result[2],check_result[3] * 100))
         elif check_result[2] <= 1048576:
-            print("Performed a GWC layers' cache detecting task, {}M space was occupied by gwc layers, Used {}%".format(check_result[2] / 1024,check_result[3] * 100))
+            logger.info("Performed a GWC layers' cache detecting task, {}M space was occupied by gwc layers, Used {}%".format(check_result[2] / 1024,check_result[3] * 100))
         else:
-            print("Performed a GWC layers' cache detecting task, {}G space was occupied by gwc layers, Used {}%".format(check_result[2] / 1048576,check_result[3] * 100))
+            logger.info("Performed a GWC layers' cache detecting task, {}G space was occupied by gwc layers, Used {}%".format(check_result[2] / 1048576,check_result[3] * 100))
     else:
-        print("GWC layers' cache detecting task was skipped.")
+        logger.info("GWC layers' cache detecting task was skipped.")
         
 
 

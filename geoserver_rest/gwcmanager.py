@@ -14,7 +14,7 @@ from . import settings
 from . import loggingconfig
 from . import utils
 
-logger = logging.getLogger("geoserver_rest.gwccachemanage")
+logger = logging.getLogger("geoserver_rest.gwcmanager")
 
 jinja_env = jinja2.Environment(
     loader=jinja2.FileSystemLoader([settings.BASE_DIR]),
