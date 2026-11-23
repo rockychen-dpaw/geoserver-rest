@@ -717,6 +717,12 @@ class GeoserverCompatibilityCheck(object):
     def post_update_featuretype_styles(self,wsname,layername,defaultstyle,styles):
         return None
 
+    """
+    WFS:
+        1.0: Longitude, Latitude
+        1.1: Latitude, Longitude
+        2.0: Latitude, Longitude
+    """
     cqlfilter_test_data = {
         "dbca_districts_public":{
             "{0}/{1}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson": 17,
@@ -785,29 +791,10 @@ class GeoserverCompatibilityCheck(object):
             "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=contains(wkb_geometry,point(-27.72949 125.33203))": 1,
             "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=crosses(wkb_geometry,linestring(-27.72949 125.33203,-21.88477 124.23340))": 2,
             "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=within(wkb_geometry,polygon((-22.36816 116.98242,-33.17871 117.24609,-32.21191 130.34180,-22.67578 130.12207,-22.36816 116.98242)))": 1,
-            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=overlaps(wkb_geometry,polygon((-22.36816 116.98242,-33.17871 117.24609,-32.21191 130.34180,-22.67578 130.12207,-22.36816 116.98242)))": 5,
-
-            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=BBOX(wkb_geometry, 113.10603251, -24.73349092, 116.49853543, -21.39394374)&xyreversed": 3,
-            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=disjoint(wkb_geometry, POLYGON((113.10603251 -24.73349092, 113.10603251 -21.39394374, 116.49853543 -21.39394374,116.49853543 -24.73349092,%20 113.10603251 -24.73349092)))&xyreversed": 14,
-            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=intersects(wkb_geometry, POLYGON((113.10603251 -24.73349092, 113.10603251 -21.39394374, 116.49853543 -21.39394374,116.49853543 -24.73349092,%20 113.10603251 -24.73349092)))&xyreversed": 3,
-            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=contains(wkb_geometry,point(125.33203 -27.72949))&xyreversed": 1,
-            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=crosses(wkb_geometry,linestring(125.33203 -27.72949,124.23340 -21.88477))&xyreversed": 2,
-            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=within(wkb_geometry,polygon((116.98242 -22.36816,117.24609 -33.17871,130.34180 -32.21191,130.12207 -22.67578,116.98242 -22.36816)))&xyreversed": 1,
-            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=overlaps(wkb_geometry,polygon((116.98242 -22.36816,117.24609 -33.17871,130.34180 -32.21191,130.12207 -22.67578,116.98242 -22.36816)))&xyreversed": 5,
-
-
-            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=BBOX(wkb_geometry, 113.10603251, -24.73349092, 116.49853543, -21.39394374)&xyreversed": 3,
-            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=disjoint(wkb_geometry, POLYGON((113.10603251 -24.73349092, 113.10603251 -21.39394374, 116.49853543 -21.39394374,116.49853543 -24.73349092,%20 113.10603251 -24.73349092)))&xyreversed": 14,
-            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=intersects(wkb_geometry, POLYGON((113.10603251 -24.73349092, 113.10603251 -21.39394374, 116.49853543 -21.39394374,116.49853543 -24.73349092,%20 113.10603251 -24.73349092)))&xyreversed": 3,
-            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=contains(wkb_geometry,point(125.33203 -27.72949))&xyreversed": 1,
-            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=crosses(wkb_geometry,linestring(125.33203 -27.72949,124.23340 -21.88477))&xyreversed": 2,
-            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=within(wkb_geometry,polygon((116.98242 -22.36816,117.24609 -33.17871,130.34180 -32.21191,130.12207 -22.67578,116.98242 -22.36816)))&xyreversed": 1,
-            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=overlaps(wkb_geometry,polygon((116.98242 -22.36816,117.24609 -33.17871,130.34180 -32.21191,130.12207 -22.67578,116.98242 -22.36816)))&xyreversed": 5,
-
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=overlaps(wkb_geometry,polygon((-22.36816 116.98242,-33.17871 117.24609,-32.21191 130.34180,-22.67578 130.12207,-22.36816 116.98242)))": 5
         }
-
     }
-    def test_cql_filter(self):
+    def test_cqlfilter(self):
         for wsname,wsdata in self._resources.get("workspaces",{}).items():
             for storename,storedata in wsdata.get("datastores",{}).items():
                 if storename == "__parameters__":
@@ -845,6 +832,66 @@ class GeoserverCompatibilityCheck(object):
                                 self._update_checklist("featuretype",operation,[False,"{}.{}: Failed to test the cql filter({}).{}:{} ".format(wsname,layername,url,res.status_code,res.text)])
                             else:
                                 self._update_checklist("featuretype",operation,[False,"{}.{}: Failed to test the cql filter({}).{}:{} ".format(wsname,layername,url,ex.__class__.__name__,str(ex))])
+
+    compatible_cqlfilter_test_data = {
+        "dbca_districts_public":{
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=BBOX(wkb_geometry, 113.10603251, -24.73349092, 116.49853543, -21.39394374)&xyreversed": 3,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=disjoint(wkb_geometry, POLYGON((113.10603251 -24.73349092, 113.10603251 -21.39394374, 116.49853543 -21.39394374,116.49853543 -24.73349092,%20 113.10603251 -24.73349092)))&xyreversed": 14,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=intersects(wkb_geometry, POLYGON((113.10603251 -24.73349092, 113.10603251 -21.39394374, 116.49853543 -21.39394374,116.49853543 -24.73349092,%20 113.10603251 -24.73349092)))&xyreversed": 3,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=contains(wkb_geometry,point(125.33203 -27.72949))&xyreversed": 1,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=crosses(wkb_geometry,linestring(125.33203 -27.72949,124.23340 -21.88477))&xyreversed": 2,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=within(wkb_geometry,polygon((116.98242 -22.36816,117.24609 -33.17871,130.34180 -32.21191,130.12207 -22.67578,116.98242 -22.36816)))&xyreversed": 1,
+            "{0}/{1}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=overlaps(wkb_geometry,polygon((116.98242 -22.36816,117.24609 -33.17871,130.34180 -32.21191,130.12207 -22.67578,116.98242 -22.36816)))&xyreversed": 5,
+
+
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=BBOX(wkb_geometry, 113.10603251, -24.73349092, 116.49853543, -21.39394374)&xyreversed": 3,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=disjoint(wkb_geometry, POLYGON((113.10603251 -24.73349092, 113.10603251 -21.39394374, 116.49853543 -21.39394374,116.49853543 -24.73349092,%20 113.10603251 -24.73349092)))&xyreversed": 14,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=intersects(wkb_geometry, POLYGON((113.10603251 -24.73349092, 113.10603251 -21.39394374, 116.49853543 -21.39394374,116.49853543 -24.73349092,%20 113.10603251 -24.73349092)))&xyreversed": 3,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=contains(wkb_geometry,point(125.33203 -27.72949))&xyreversed": 1,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=crosses(wkb_geometry,linestring(125.33203 -27.72949,124.23340 -21.88477))&xyreversed": 2,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=within(wkb_geometry,polygon((116.98242 -22.36816,117.24609 -33.17871,130.34180 -32.21191,130.12207 -22.67578,116.98242 -22.36816)))&xyreversed": 1,
+            "{0}/{1}/ows?service=WFS&version=2.0&request=GetFeature&typeName={1}%3A{2}&outputFormat=application%2Fjson&cql_filter=overlaps(wkb_geometry,polygon((116.98242 -22.36816,117.24609 -33.17871,130.34180 -32.21191,130.12207 -22.67578,116.98242 -22.36816)))&xyreversed": 5,
+
+        }
+    }
+    def test_compatible_cqlfilter(self):
+        for wsname,wsdata in self._resources.get("workspaces",{}).items():
+            for storename,storedata in wsdata.get("datastores",{}).items():
+                if storename == "__parameters__":
+                    continue
+
+                storeparameters = storedata["__parameters__"]
+                if isinstance(storeparameters,str):
+                    #is a local store
+                    operation = "Test Compatible CQL Filter For Geopackage Layer"
+                else:
+                    operation = "Test Compatible CQL Filter For Postgis Layer"
+
+                for layername,layerdata in storedata.items():
+                    if layername == "__parameters__":
+                        continue
+
+                    testcases = {}
+                    for k,v in self.compatible_cqlfilter_test_data.items():
+                        if k in layername.lower():
+                            testcases = v
+                            break
+                    for urlpattern, featurecount in testcases.items():
+                        url = urlpattern.format(self.geoserver.geoserver_url,wsname,layername)
+                        try:
+                            data = None
+                            res = None
+                            res = self.geoserver.get(url)
+                            data = res.json()
+                            if data.get("totalFeatures",0) != featurecount:
+                                self._update_checklist("featuretype",operation,[False,"{}.{}: Failed to test the compatible cql filter({}), expected totalFeatures '{}', but got '{}' ".format(wsname,layername,url,featurecount,data.get("totalFeatures",0))])
+                            else:
+                                self._update_checklist("featuretype",operation,[True,"{}.{}: Succeed to test the compatible cql filter({}), got totalFeatures '{}'".format(wsname,layername,url,featurecount)])
+                        except Exception as ex:
+                            if res:
+                                self._update_checklist("featuretype",operation,[False,"{}.{}: Failed to test the compatible cql filter({}).{}:{} ".format(wsname,layername,url,res.status_code,res.text)])
+                            else:
+                                self._update_checklist("featuretype",operation,[False,"{}.{}: Failed to test the compatible cql filter({}).{}:{} ".format(wsname,layername,url,ex.__class__.__name__,str(ex))])
 
 
 
@@ -2104,7 +2151,8 @@ class GeoserverCompatibilityCheck(object):
 
             self.update_style()
 
-            self.test_cql_filter()
+            self.test_cqlfilter()
+            self.test_compatible_cqlfilter()
 
             self.create_resources_in_wmsserver()
             self.create_wmsstore()
@@ -2154,7 +2202,7 @@ Geoserver Compatibility Check: {}
 {}
 ===========================================================================
 """.format("Passed" if self.compatible else "Failed","\n".join(
-    "    {} : {}\n{}\n".format(feature,"Passed" if featuredata[0] else "Failed","\n".join("        {} : {}\n{}".format(operation,"Passed" if checkresult[0] else "Failed","\n".join("            {1}\t: {0}".format("Passed" if item[0] else "Failed",item[1]) for item in checkresult[1] )  ) for operation,checkresult in featuredata[1].items())) for feature,featuredata in self._checklist.items()
+    "    {} : {}\n{}\n".format(feature,"Passed" if featuredata[0] else "Failed","\n\n".join("        {} : {}\n{}".format(operation,"Passed" if checkresult[0] else "Failed","\n".join("            {1}\t: {0}".format("Passed" if item[0] else "Failed",item[1]) for item in checkresult[1] )  ) for operation,checkresult in featuredata[1].items())) for feature,featuredata in self._checklist.items()
 )))
         if not self.compatible:
             print("\n\n")
@@ -2163,8 +2211,8 @@ Geoserver Compatibility Check: {}
 Failed Geoserver Compatibility Check Tasks: 
 {}
 ===========================================================================
-""".format("\n".join(
-    "    {} : {}\n{}\n".format(feature,"Passed" if featuredata[0] else "Failed","\n".join("        {} : {}\n{}".format(operation,"Passed" if checkresult[0] else "Failed","\n".join("            {1}\t: {0}".format("Passed" if item[0] else "Failed",item[1]) for item in checkresult[1] if not item[0] )  ) for operation,checkresult in featuredata[1].items() if not checkresult[0] )) for feature,featuredata in self._checklist.items() if not featuredata[0]
+""".format("\n\n".join(
+    "    {} : {}\n{}\n".format(feature,"Passed" if featuredata[0] else "Failed","\n\n".join("        {} : {}\n{}".format(operation,"Passed" if checkresult[0] else "Failed","\n".join("            {1}\t: {0}".format("Passed" if item[0] else "Failed",item[1]) for item in checkresult[1] if not item[0] )  ) for operation,checkresult in featuredata[1].items() if not checkresult[0] )) for feature,featuredata in self._checklist.items() if not featuredata[0]
 )))
 
 
